@@ -4,10 +4,10 @@ A tool I created and have been using for years to make codeforces problem solvin
 ## How to use: ##
 - Clone this repo to Documents or Desktop or any other directory.
 - Press Win + R, type in ```cmd``` and press Enter again.
-- Using ```cd Desktop/CF_cli_tool``` or ```cd Documents/CF_cli_tool``` or ```cd your_directory/CF_cli_tool``` go inside the folder.
+- Using ```cd Desktop/CMFT``` or ```cd Documents/CFMT``` or ```cd {your_directory}/CFMT``` go inside the folder.
 - Write in ```python cfmt.py```
 - Next on follow the cli tool's instructions.
-- code files will be stored in the ```./CF_cli_tool/{your_github_repo}``` directory file.
+- code files will be stored in the ```./CFMT/{your_github_repo}``` directory file.
 
 ## Now, I've also built a GUI version ;-;
 - Clone this repo.
