@@ -1,4 +1,4 @@
-# CF_managing_tool
+# CFMT [Codeforces Managing Tool]
 A tool I created and have been using for years to make codeforces problem solving a little painless, with automated file management and template fetching.
 
 ## How to use: ##
