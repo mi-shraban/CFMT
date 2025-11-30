@@ -10,8 +10,8 @@ A tool I created and have been using for years to make codeforces problem solvin
 - code files will be stored in the ```./CFMT/{your_github_repo}``` directory file.
 
 ## Now, I've also built a GUI version ;-;
-- Clone this repo.
-- Just open the ```cfmt_gui.exe``` file to use it.
-- However, the CLI tool is simply bettter.
+- Clone this repo OR just download[https://github.com/mi-shraban/CFMT/releases/tag/v_1.0] the GUI tool.
+- Open ```cfmt_gui.exe``` to use it.
+- However, the CLI tool is simply bettter ;-;
 
 ## Feel free to improve and contribute to the tool. ##
