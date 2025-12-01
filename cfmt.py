@@ -76,8 +76,8 @@ os.system(f"code {path}")
 print("\nTry for no more than 30 minutes...(Check tutorial to understand)\n")
 
 while True:
+    print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-and 'q' to quit\n")
     try:
-        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-and 'q' to quit\n")
         x = input("Option: ")
         if x.lower() == 'c':
             compile_code(lang, path)
