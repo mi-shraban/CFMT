@@ -211,7 +211,7 @@ class CFMT_GUI(QMainWindow):
 
 
     def run_code(self):
-        self.output_text.append("--Running code in separate terminal-- \n--Copy Paste the test cases and compare--\n")
+        self.output_text.append(f"--Running {self.prob_input.text().strip()} in separate terminal-- \n--Copy Paste the test cases there and compare--\n")
 
         if self.current_lang == "cpp":
             os.system('start cmd /k a.exe')
