@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTextEdit, QRadioButton, QButtonGroup, QMessageBox, QInputDialog
@@ -92,7 +93,7 @@ class CFMT_GUI(QMainWindow):
     def init_ui(self):
         self.setWindowTitle("CFMT GUI")
         self.setWindowIcon(QIcon("codeforces.ico"))
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(1280, 640)
 
         self.set_dark_theme()
 
@@ -158,11 +159,27 @@ class CFMT_GUI(QMainWindow):
         actions.addWidget(self.git_btn)
         layout.addLayout(actions)
 
-        # Output area
-        layout.addWidget(QLabel("Logs:"))
+        bottom_layout = QHBoxLayout()
+
+        # Left: Logs
+        left_box_layout = QVBoxLayout()
+        left_box_layout.addWidget(QLabel("Logs & Outputs:"))
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
-        layout.addWidget(self.output_text)
+        left_box_layout.addWidget(self.output_text)
+
+        # Right: Running Code
+        right_box_layout = QVBoxLayout()
+        right_box_layout.addWidget(QLabel("Input Box:"))
+        self.unsolved_box = QTextEdit()
+        self.unsolved_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
+        right_box_layout.addWidget(self.unsolved_box)
+
+        # Add both boxes to bottom area
+        bottom_layout.addLayout(left_box_layout, 1)  # stretch = 1
+        bottom_layout.addLayout(right_box_layout, 1)  # equal size
+
+        layout.addLayout(bottom_layout)
 
 
     def set_language(self, lang):
@@ -191,6 +208,7 @@ class CFMT_GUI(QMainWindow):
         self.current_file_path = file_path
         os.system(f'code "{file_path}"')
 
+        self.output_text.append(f"--- {file_name} created ---")
         self.compile_btn.setEnabled(True)
         self.run_btn.setEnabled(True)
         self.git_btn.setEnabled(True)
@@ -211,12 +229,41 @@ class CFMT_GUI(QMainWindow):
 
 
     def run_code(self):
-        self.output_text.append(f"--Running {self.prob_input.text().strip()} in separate terminal-- \n--Copy Paste the test cases there and compare--\n")
+        prob_id = self.prob_input.text().strip()
+        if not prob_id:
+            QMessageBox.warning(self, "Error", "Enter a Problem ID first!")
+            return
+        self.output_text.append(f"\n--- Running {prob_id} ---\n")
+        user_input = self.unsolved_box.toPlainText()
 
-        if self.current_lang == "cpp":
-            os.system('start cmd /k a.exe')
-        if self.current_lang == "py":
-            os.system(f'start cmd /k python "{self.current_file_path}"')
+        try:
+            if self.current_lang == "cpp":
+                cmd = ["a.exe"]
+
+            elif self.current_lang == "py":
+                cmd = ["python", self.current_file_path]
+
+            # Proper way to run code with stdin/stdout pipes
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            stdout, stderr = process.communicate(user_input)
+
+            # Display program output
+            if stdout.strip():
+                self.output_text.append("-- Output:\n")
+                self.output_text.append(stdout)
+
+            if stderr.strip():
+                self.output_text.append("\n[Error]\n" + stderr)
+
+        except Exception as e:
+            self.output_text.append(f"Runtime Error: {str(e)}")
 
 
     def git_push(self):
