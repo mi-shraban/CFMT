@@ -10,7 +10,7 @@ A tool I created and have been using for years to make codeforces problem solvin
 - code files will be stored in the ```./CFMT/{your_github_repo}``` directory file.
 
 ## Now, I've also built a GUI version ;-;
-- Clone this repo OR just [download](https://github.com/mi-shraban/CFMT/releases/tag/v_1.0) the GUI tool ```[cfmt_gui.exe]```.
+- Clone this repo OR just [download](https://github.com/mi-shraban/CFMT/releases/tag/v_1.1) the GUI tool ```[cfmt_gui.exe]```.
 - Open ```cfmt_gui.exe``` to use it.
 - Add your own python/cpp template as ```py_template.txt``` or ```cpp_template.txt```
 - However, the CLI tool is simply bettter ;-;
