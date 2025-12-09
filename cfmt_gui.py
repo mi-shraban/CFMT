@@ -208,6 +208,8 @@ class CFMT_GUI(QMainWindow):
         self.current_file_path = file_path
         os.system(f'code "{file_path}"')
 
+        self.unsolved_box.clear()
+        self.unsolved_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
         self.output_text.append(f"--- {file_name} created ---")
         self.compile_btn.setEnabled(True)
         self.run_btn.setEnabled(True)
