@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 	QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 	QLineEdit, QPushButton, QTextEdit, QRadioButton, QButtonGroup, QMessageBox, QInputDialog
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QIcon
 
 
@@ -36,7 +36,7 @@ class GitPushThread(QThread):
 			os.system("git push origin main")
 
 			os.chdir("..")
-			self.output_signal.emit("\nSuccess! Git push complete.")
+			self.output_signal.emit("Completed.")
 		except Exception as e:
 			self.output_signal.emit(f"Error: {str(e)}")
 		finally:
@@ -87,38 +87,84 @@ class CFMT_GUI(QMainWindow):
 		return text.strip()
 
 	def init_ui(self):
-		self.setWindowTitle("CFMT GUI")
+		self.setWindowTitle("CFMT")
 		self.setWindowIcon(QIcon("codeforces.ico"))
 		self.setMinimumSize(1280, 640)
 
-		self.set_dark_theme()
+		self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1e1e1e;
+            }
+            QWidget {
+                background-color: #121212;
+                color: #d8e2dc;
+            }
+            QLineEdit {
+                background-color: #1e1e1e;
+                border: 2px solid #2a2a2a;
+                border-radius: 5px;
+                padding: 8px;
+                color: #d8e2dc;
+            }
+            QLineEdit:focus {
+                border: 2px solid #00bcd4;
+            }
+        """)
 
 		central = QWidget()
 		self.setCentralWidget(central)
 		layout = QVBoxLayout(central)
+		layout.setSpacing(10)
+		layout.setContentsMargins(20, 10, 20, 10)
 
 		# Header
-		header = QLabel("CFMT GUI")
-		header.setFont(QFont("Arial", 24, QFont.Bold))
+		header = QLabel("Codeforces Management Tool")
+		header.setFont(QFont("Segoe UI", 26, QFont.Bold))
 		header.setAlignment(Qt.AlignCenter)
+		header.setStyleSheet("""
+			QLabel: {
+				color: #d8e2dc;
+			}
+		""")
 		layout.addWidget(header)
 
 		# Problem Input
+		prob_container = QWidget()
+		prob_container.setStyleSheet("""
+			QWidget: {
+				background-color: #1e1e1e;
+				border-radius: 10px;
+				padding: 15px;
+			}
+		""")
 		prob_layout = QHBoxLayout()
-		prob_layout.addWidget(QLabel("Problem ID:"))
+		prob_label = QLabel("Problem ID:")
+		prob_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+		prob_layout.addWidget(prob_label)
+
 		self.prob_input = QLineEdit()
 		self.prob_input.setPlaceholderText("e.g., 2160B")
+		self.prob_input.setFont(QFont("Segoe UI", 9))
 		prob_layout.addWidget(self.prob_input)
 		layout.addLayout(prob_layout)
 
 		# Language selection
 		lang_layout = QHBoxLayout()
 		lang_label = QLabel("Language:")
+		lang_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
 		lang_layout.addWidget(lang_label)
 
 		self.lang_group = QButtonGroup()
-		self.cpp_radio = QRadioButton("C++")
 		self.py_radio = QRadioButton("Python")
+		self.cpp_radio = QRadioButton("C++")
+		for radio in [self.cpp_radio, self.py_radio]:
+			radio.setFont(QFont("Segoe UI", 9))
+			radio.setStyleSheet("""
+								QRadioButton {
+									spacing: 5px;
+									padding: 3px;
+								}
+								""")
 		self.lang_group.addButton(self.cpp_radio)
 		self.lang_group.addButton(self.py_radio)
 		self.py_radio.setChecked(True)
@@ -133,7 +179,22 @@ class CFMT_GUI(QMainWindow):
 		# Create file button
 		self.create_btn = QPushButton("Create Code File")
 		self.create_btn.setMinimumHeight(40)
+		self.create_btn.setFont(QFont("Segoe UI", 11, QFont.Bold))
 		self.create_btn.clicked.connect(self.create_file)
+		self.create_btn.setStyleSheet("""
+			QPushButton {
+					background: #00bcd4;
+					border-radius: 8px;
+					color: #2a2a2a;
+					font-weight: bold;
+			}
+			QPushButton:hover {
+					background: #0097a7;
+			}
+			QPushButton:pressed {
+				background-color: #006064;
+			}
+		""")
 		layout.addWidget(self.create_btn)
 
 		# Action buttons
@@ -150,6 +211,31 @@ class CFMT_GUI(QMainWindow):
 		self.git_btn.clicked.connect(self.git_push)
 		self.git_btn.setEnabled(False)
 
+		for btn in [self.compile_btn, self.run_btn, self.git_btn]:
+			btn.setMinimumHeight(40)
+			btn.setFont(QFont("Segoe UI", 9))
+			btn.setStyleSheet("""
+				QPushButton {
+					background-color: #2a2a2a;
+					border: 2px solid #00bcd4;
+					border-radius: 8px;
+					color: #00bcd4;
+					font-weight: bold;
+				}
+				QPushButton:hover {
+					background-color: #00bcd4;
+					color: #2a2a2a;
+				}
+				QPushButton:pressed {
+					background-color: #0097a7;
+				}
+				QPushButton:disabled {
+					background-color: #1a1a1a;
+					border-color: #444;
+					color: #666;
+				}
+			""")
+
 		actions.addWidget(self.compile_btn)
 		actions.addWidget(self.run_btn)
 		actions.addWidget(self.git_btn)
@@ -157,19 +243,39 @@ class CFMT_GUI(QMainWindow):
 
 		bottom_layout = QHBoxLayout()
 
-		# Left: Logs
+		# Left: Logs & Outputs
 		left_box_layout = QVBoxLayout()
-		left_box_layout.addWidget(QLabel("Logs & Outputs:"))
-		self.output_text = QTextEdit()
-		self.output_text.setReadOnly(True)
-		left_box_layout.addWidget(self.output_text)
+		left_box_label = QLabel("Logs & Outputs:")
+		left_box_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
+		left_box_layout.addWidget(left_box_label)
 
-		# Right: Running Code
+		self.log_text = QTextEdit()
+		self.log_text.setReadOnly(True)
+
+		# Right: Inputs
 		right_box_layout = QVBoxLayout()
-		right_box_layout.addWidget(QLabel("Input Box:"))
-		self.unsolved_box = QTextEdit()
-		self.unsolved_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
-		right_box_layout.addWidget(self.unsolved_box)
+		right_box_label = QLabel("Input Box:")
+		right_box_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
+		right_box_layout.addWidget(right_box_label)
+
+		self.input_box = QTextEdit()
+		self.input_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
+
+		for box in [self.input_box, self.log_text]:
+			box.setFont(QFont("Consolas", 10))
+			box.setStyleSheet("""
+				QTextEdit {
+					background-color: #1e1e1e;
+					border: 2px solid #30363d;
+					border-radius: 8px;
+					color: #00bcd4;
+					padding: 12px;
+					selection-background-color: #32b3b3;
+				}
+			""")
+
+		left_box_layout.addWidget(self.log_text)
+		right_box_layout.addWidget(self.input_box)
 
 		# Add both boxes to bottom area
 		bottom_layout.addLayout(left_box_layout, 1)  # stretch = 1
@@ -202,14 +308,14 @@ class CFMT_GUI(QMainWindow):
 		self.current_file_path = file_path
 		os.system(f'code "{file_path}"')
 
-		self.unsolved_box.clear()
-		self.unsolved_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
-		self.output_text.append(f"--- {file_name} created ---\n")
+		self.input_box.clear()
+		self.input_box.setPlaceholderText("Paste test input here BEFORE RUNNING THE CODE...")
+		self.log_text.append(f"--- {file_name} created ---\n")
 		self.compile_btn.setEnabled(True)
 		self.run_btn.setEnabled(True)
 		self.git_btn.setEnabled(True)
-		if self.is_git_logged_in():
-			self.output_text.append(f"--- To access Git push operation: \n"
+		if not self.is_git_logged_in():
+			self.log_text.append(f"--- To access Git push operation: \n"
 									f"--- Download and Log into Github Desktop app from: "
 									f"'https://desktop.github.com/download/'\n"
 									f"--- Otherwise, your solutions will be stored in {self.solve_folder}, "
@@ -218,24 +324,24 @@ class CFMT_GUI(QMainWindow):
 
 	def compile_code(self):
 		if self.current_lang == "py":
-			self.output_text.append("Python does not need compilation.\n")
+			self.log_text.append("Python does not need compilation.\n")
 			return
 
 		cmd = f'g++ -std=c++14 "{self.current_file_path}" -o a.exe'
-		self.output_text.append(f"\nCompiling...\n")
+		self.log_text.append(f"\nCompiling...\n")
 		result = os.system(cmd)
 		if result == 0:
-			self.output_text.append("\nCompiled successfully!\n")
+			self.log_text.append("\nCompiled successfully!\n")
 		else:
-			self.output_text.append("\nCompilation failed!\n")
+			self.log_text.append("\nCompilation failed!\n")
 
 	def run_code(self):
 		prob_id = self.prob_input.text().strip()
 		if not prob_id:
 			QMessageBox.warning(self, "\nError", "Enter a Problem ID first!")
 			return
-		self.output_text.append(f"\n--- Running {prob_id} ---\n")
-		user_input = self.unsolved_box.toPlainText()
+		self.log_text.append(f"--- Running {prob_id} ---\n")
+		user_input = self.input_box.toPlainText()
 
 		try:
 			if self.current_lang == "cpp":
@@ -257,14 +363,14 @@ class CFMT_GUI(QMainWindow):
 
 			# Display program output
 			if stdout.strip():
-				self.output_text.append("-- Output:\n")
-				self.output_text.append(stdout)
+				self.log_text.append("-- Output:\n")
+				self.log_text.append(stdout)
 
 			if stderr.strip():
-				self.output_text.append("\n[Error]\n" + stderr)
+				self.log_text.append("\n[Error]\n" + stderr)
 
 		except Exception as e:
-			self.output_text.append(f"\nRuntime Error: {str(e)}")
+			self.log_text.append(f"\nRuntime Error: {str(e)}")
 
 	def is_git_logged_in(self):
 		name = subprocess.getoutput("git config --global user.name").strip()
@@ -275,73 +381,16 @@ class CFMT_GUI(QMainWindow):
 		prob_id = self.prob_input.text().strip()
 
 		self.git_btn.setEnabled(False)
-		self.output_text.append("\n--- Git Push Started ---\n")
+		self.log_text.append("\n--- Git Push Started ---\n")
 
 		self.git_thread = GitPushThread(
 			self.current_file_path,
 			prob_id,
 			self.solve_folder
 		)
-		self.git_thread.output_signal.connect(self.output_text.append)
+		self.git_thread.output_signal.connect(self.log_text.append)
 		self.git_thread.finished_signal.connect(lambda: self.git_btn.setEnabled(True))
 		self.git_thread.start()
-
-	def set_dark_theme(self):
-		self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1e1e1e;
-            }
-            QWidget {
-                background-color: #121212;
-                color: #d8e2dc;
-            }
-            QLabel {
-                color: #d8e2dc;
-            }
-            QLineEdit {
-                background-color: #1e1e1e;
-                border: 2px solid #2a2a2a;
-                border-radius: 5px;
-                padding: 8px;
-                color: #d8e2dc;
-            }
-            QLineEdit:focus {
-                border: 2px solid #00bcd4;
-            }
-            QPushButton {
-                background-color: #00bcd4;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0097a7;
-            }
-            QPushButton:pressed {
-                background-color: #264B5D;
-            }
-            QPushButton:disabled {
-                background-color: #3e3e4e;
-                color: #666;
-            }
-            QTextEdit {
-                background-color: #2a2a2a;
-                border: 2px solid #3e3e4e;
-                border-radius: 5px;
-                color: #00ff00;
-                padding: 10px;
-            }
-            QRadioButton {
-                color: #d8e2dc;
-                spacing: 5px;
-            }
-            QRadioButton::indicator {
-                width: 18px;
-                height: 18px;
-            }
-        """)
 
 
 def main():
