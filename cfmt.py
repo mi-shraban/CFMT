@@ -1,10 +1,16 @@
-import os.path
+import os.path, subprocess
 
 
 def create_user():
     print("Set up a repository for your Codeforces solutions if you haven't.")
     github_username = input("Github username: ")
     git_repo_name = input("Repository name: ")
+    if not is_git_logged_in():
+        print(f"--- To access Git push operation: \n"
+              f"--- Download and Log into Github Desktop app from: "
+              f"'https://desktop.github.com/download/'\n"
+              f"--- Otherwise, your solutions will be stored in {solve_folder}, "
+              f"you can push the changes later on.")
     with open("user_info.txt", "w") as f:
         f.write(f"{git_repo_name}")
     os.system(f'git clone https://github.com/{github_username}/{git_repo_name}.git')
@@ -36,6 +42,12 @@ def run_code(l, p):
         print()
     elif l == 'py':
         os.system(f"python {p}")
+
+
+def is_git_logged_in():
+    name = subprocess.getoutput("git config --global user.name").strip()
+    email = subprocess.getoutput("git config --global user.email").strip()
+    return bool(name) and bool(email)
 
 
 def git_push(f, pId):
@@ -76,7 +88,10 @@ os.system(f"code {path}")
 print("\nTry for no more than 30 minutes...(Check tutorial to understand)\n")
 
 while True:
-    print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-and 'q' to quit\n")
+    if is_git_logged_in():
+        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-and 'q' to quit\n")
+    else:
+        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-and 'q' to quit\n")
     try:
         x = input("Option: ")
         if x.lower() == 'c':
