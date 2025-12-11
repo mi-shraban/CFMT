@@ -15,6 +15,6 @@ A tool I created and have been using for years to make codeforces problem solvin
 - Clone this repo OR just [download](https://github.com/mi-shraban/CFMT/releases/tag/v_1.1) the GUI tool ```[cfmt_gui.exe]```.
 - Open ```cfmt_gui.exe``` to use it.
 - Add your own python/cpp template as ```py_template.txt``` or ```cpp_template.txt```
-<img width="1280" height="640" alt="cfmt" src="https://github.com/user-attachments/assets/d73773f7-4a6b-404f-a4b7-ca08ec521526" />
+<img width="1440" height="720" alt="cfmt" src="https://github.com/user-attachments/assets/ec26f659-bda3-4e72-8c44-6322c74ebd9f" />
 
 ## Feel free to improve and contribute to the tool. ##
