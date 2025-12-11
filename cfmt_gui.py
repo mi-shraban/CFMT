@@ -41,54 +41,48 @@ class GitPushThread(threading.Thread):
 			self.finished_callback()
 
 
+class UserInfoDialog(tk.Toplevel):
+	def __init__(self, parent):
+		super().__init__(parent)
+		self.title("CF Repo Setup")
+		self.geometry("450x250")
+		self.resizable(False, False)
+		self.iconbitmap("codeforces.ico")
+
+		ttk.Label(self, text="GitHub Username:", font=("Segoe UI", 11)).pack(pady=10)
+		self.username_entry = ttk.Entry(self, width=40)
+		self.username_entry.pack()
+
+		ttk.Label(self, text="CF Repository Name:", font=("Segoe UI", 11)).pack(pady=10)
+		self.repo_entry = ttk.Entry(self, width=40)
+		self.repo_entry.pack()
+
+		ttk.Button(self, text="OK", command=self.submit).pack(pady=15)
+
+		self.username = None
+		self.repo = None
+		self.grab_set()
+
+	def submit(self):
+		self.username = self.username_entry.get().strip()
+		self.repo = self.repo_entry.get().strip()
+		self.destroy()
+
+
 class CFMT_GUI:
-	def __init__(self, root):
+	def __init__(self, root, folder):
 		self.root = root
 		self.current_file_path = None
 		self.current_lang = tk.StringVar(value='py')
 		self.git_thread = None
 
-		self.solve_folder = None
+		self.solve_folder = folder
 		self.available_themes = [
 			'litera', 'flatly', 'minty', 'sandstone', 'morph',
 			'solar', 'superhero', 'darkly', 'cyborg', 'vapor'
 		]
 		# 5 light themes, 5 dark themes
-		self.init_user_info()
 		self.init_ui()
-
-	def init_user_info(self):
-		if not os.path.exists("user_info.txt"):
-			self.setup_user_info()
-
-		with open("user_info.txt", "r") as f:
-			self.solve_folder = f.read().strip()
-
-		# Clone repo if missing
-		if not os.path.exists(self.solve_folder):
-			messagebox.showinfo("Cloning Repo",
-								f"Cloning repository: {self.solve_folder}")
-			os.system(f"git clone https://github.com/{self.github_username}/{self.solve_folder}.git")
-
-	def setup_user_info(self):
-		github_username = simpledialog.askstring("Setup Required",
-												 "GitHub username:")
-		if not github_username or not github_username.strip():
-			messagebox.showerror("Error", "This field is required.")
-			sys.exit(1)
-
-		git_repo_name = simpledialog.askstring("Setup Required",
-											   "Your CF Repository name:")
-		if not git_repo_name or not git_repo_name.strip():
-			messagebox.showerror("Error", "This field is required.")
-			sys.exit(1)
-
-		self.github_username = github_username.strip()
-
-		with open("user_info.txt", "w") as f:
-			f.write(git_repo_name.strip())
-
-		os.system(f"git clone https://github.com/{github_username.strip()}/{git_repo_name.strip()}.git")
 
 	def init_ui(self):
 		self.root.title("CFMT - Codeforces Management Tool")
@@ -386,7 +380,7 @@ class CFMT_GUI:
 
 
 def main():
-	# Load saved theme preference or use default
+	# Load saved theme
 	default_theme = "darkly"
 	if os.path.exists("theme_preference.txt"):
 		try:
@@ -397,8 +391,32 @@ def main():
 		except:
 			pass
 
+	# Create root FIRST (hidden)
 	root = ttk.Window(themename=default_theme)
-	app = CFMT_GUI(root)
+	root.withdraw()   # << Hide the main window
+
+	if not os.path.exists("user_info.txt"):
+		dialog = UserInfoDialog(root)
+		root.wait_window(dialog)
+
+		github_username = dialog.username
+		git_repo_name = dialog.repo
+
+		if not github_username or not git_repo_name:
+			messagebox.showerror("Error", "Both fields are required.")
+			sys.exit(1)
+
+		with open("user_info.txt", "w") as f:
+			f.write(git_repo_name)
+
+		os.system(f"git clone https://github.com/{github_username}/{git_repo_name}.git")
+	else:
+		with open("user_info.txt", "r") as f:
+			git_repo_name = f.read().strip()
+
+	# Now show the main GUI
+	root.deiconify()
+	app = CFMT_GUI(root, git_repo_name)
 	root.mainloop()
 
 
