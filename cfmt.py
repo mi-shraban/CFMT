@@ -31,7 +31,7 @@ def compile_code(l, p):
     if l == 'cpp':
         os.system(f'g++ -std=c++14 {p}')
         print('Compiled Successfully')
-    elif lang == 'py':
+    elif l == 'py':
         print('Compilation not needed.')
 
 
@@ -77,12 +77,11 @@ directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):
     os.makedirs(directory)
 
-probId = input('Problem ID: (eg. 2160B): ')
+probId = input('Problem ID: (eg. 2160B): ').strip()
 lang = input("Enter language extension: (eg: 'cpp'/'py'): ")
-file = probId + '.py'
+file = f"{probId}.{lang}"
 path = os.path.join(directory, f"{file}")
 open_code_file_with_template(lang, path)
-
 
 os.system(f"code {path}")
 print("\nTry for no more than 30 minutes...(Check tutorial to understand)\n")
