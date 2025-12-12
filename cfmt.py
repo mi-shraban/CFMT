@@ -1,10 +1,55 @@
-import os.path, subprocess
+import os.path, subprocess, re
+
+
+# input sanitation
+def get_valid_prob_id():
+    while True:
+        probId = input('Problem ID: (eg. 2160B): ').strip()
+        if not probId:
+            print("Problem ID mustn't be empty.")
+            continue
+        if not re.match('^[0-9A-Z]+$', probId):
+            print("This doesn't look like a valid problem ID.")
+            continue
+        return probId
+
+
+def get_valid_user_name():
+    while True:
+        username = input("Github username: ").strip()
+        if not username:
+            print("Github username mustn't be empty.")
+            continue
+        if len(username) > 39:
+            print("Provided string too long, cannot be Github username.")
+            continue
+        if not re.match(r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$", username):
+            print("This doesn't look like a valid Github username.")
+            continue
+        return username
+
+
+def get_valid_repo_name():
+    while True:
+        reponame = input("Repository name: ").strip()
+        if not reponame:
+            print("Repository name mustn't be empty.")
+            continue
+        if reponame.endswith(".git"):
+            return reponame.rstrip(".git")
+        if len(reponame) > 100:
+            print("Provided string too long, cannot be Repository name.")
+            continue
+        if not re.match("^[A-Za-z0-9._-]{1,100}$", reponame):
+            print("This doesn't look like a valid Repository name.")
+            continue
+        return reponame
 
 
 def create_user():
     print("Set up a repository for your Codeforces solutions if you haven't.")
-    github_username = input("Github username: ")
-    git_repo_name = input("Repository name: ")
+    github_username = get_valid_user_name()
+    git_repo_name = get_valid_repo_name()
     if not is_git_logged_in():
         print(f"--- To access Git push operation: \n"
               f"--- Download and Log into Github Desktop app from: "
@@ -77,7 +122,8 @@ directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):
     os.makedirs(directory)
 
-probId = input('Problem ID: (eg. 2160B): ').strip()
+
+probId = get_valid_prob_id()
 lang = input("Enter language extension: (eg: 'cpp'/'py'): ")
 file = f"{probId}.{lang}"
 path = os.path.join(directory, f"{file}")
@@ -88,9 +134,9 @@ print("\nTry for no more than 30 minutes...(Check tutorial to understand)\n")
 
 while True:
     if is_git_logged_in():
-        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-and 'q' to quit\n")
+        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'g' for git push \n\t-'q' to quit\n")
     else:
-        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-and 'q' to quit\n")
+        print("\t-'c' to compile code (C++) \n\t-'r' to run code \n\t-'q' to quit\n")
     try:
         x = input("Option: ")
         if x.lower() == 'c':
