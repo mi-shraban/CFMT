@@ -34,7 +34,7 @@ class GitPushThread(threading.Thread):
 			os.system("git push origin main")
 
 			os.chdir("..")
-			self.output_callback("Completed.\n")
+			self.output_callback("Completed.\n\n\n")
 		except Exception as e:
 			self.output_callback(f"Error: {str(e)}\n")
 		finally:
