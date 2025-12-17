@@ -8,7 +8,7 @@ def get_valid_prob_id():
         if not probId:
             print("Problem ID mustn't be empty.")
             continue
-        if not re.match('^[0-9A-Z]+$', probId):
+        if not re.match(r'^[0-9]+[A-Z][1-9]*$', probId):
             print("This doesn't look like a valid problem ID.")
             continue
         return probId

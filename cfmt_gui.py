@@ -2,6 +2,8 @@ import sys
 import os
 import subprocess
 import threading
+import re
+import stat
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 import ttkbootstrap as ttk
@@ -63,9 +65,71 @@ class UserInfoDialog(tk.Toplevel):
 		self.repo = None
 		self.grab_set()
 
+	@staticmethod
+	def validate_username(username):
+		if not username:
+			return False, "Github username mustn't be empty."
+		if len(username) > 39:
+			return False, "Provided string too long, cannot be Github username."
+		if not re.match(r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$", username):
+			return False, "This doesn't look like a valid Github username."
+		return True, ""
+
+	@staticmethod
+	def validate_repo_name(reponame):
+		if not reponame:
+			return False, "Repository name mustn't be empty."
+		# Remove .git suffix if present
+		if reponame.endswith(".git"):
+			reponame = reponame.rstrip(".git")
+		if len(reponame) > 100:
+			return False, "Provided string too long, cannot be Repository name."
+		if not re.match(r"^[A-Za-z0-9._-]{1,100}$", reponame):
+			return False, "This doesn't look like a valid Repository name."
+		return True, reponame
+
 	def submit(self):
-		self.username = self.username_entry.get().strip()
-		self.repo = self.repo_entry.get().strip()
+		username = self.username_entry.get().strip()
+		repo = self.repo_entry.get().strip()
+		# Validate username
+		is_valid, error_msg = self.validate_username(username)
+		if not is_valid:
+			messagebox.showwarning("Invalid Username", error_msg)
+			return
+		# Validate repository name
+		is_valid, reponame = self.validate_repo_name(repo)
+		if not is_valid:
+			messagebox.showwarning("Invalid Repository Name", reponame)
+			return
+
+		if os.path.exists(reponame) and os.path.isdir(reponame):
+			use_existing = messagebox.askyesno(
+				"Repository Already Cloned",
+				f"{reponame} already exists and is not an empty directory.\n"
+				f"Yes: Use existing repo.\n"
+				f"No: Enter a different repo\n"
+			)
+			if use_existing:
+				self.username = username
+				self.repo = reponame
+				self.destroy()
+				return
+			else:
+				return
+
+		clone_res = os.system(f"git clone https://github.com/{username}/{reponame}.git")
+		if clone_res:
+			retry = messagebox.askretrycancel("Repository Not Found\n",
+								f"Failed to clone github.com/{username}{reponame}\n"
+								f"-- Check if the Repository exists.\n"
+								f"-- Recheck the spellings\n"
+								f"-- Check internet connection\n")
+			if retry:
+				return
+			else:
+				sys.exit(1)
+		self.username = username
+		self.repo = reponame
 		self.destroy()
 
 
@@ -261,10 +325,21 @@ class CFMT_GUI:
 		self.log_text.text.see(tk.END)
 		self.log_text.text.config(state="disabled")
 
+	@staticmethod
+	def validate_problem_id(prob_id):
+		"""Validate problem ID format (e.g., 2160B)"""
+		if not prob_id:
+			return False, "Problem ID mustn't be empty."
+		if not re.match(r'^[0-9]+[A-Z][1-9]*$', prob_id):
+			return False, "This doesn't look like a valid problem ID."
+		return True, ""
+
 	def create_file(self):
 		prob_id = self.prob_input.get().strip()
-		if not prob_id or prob_id == "e.g., 2160B":
-			messagebox.showwarning("Error", "Enter a Problem ID first!")
+
+		is_valid, error_msg = self.validate_problem_id(prob_id)
+		if not is_valid or prob_id == "e.g., 2160B":
+			messagebox.showwarning("Invalid Input", error_msg or "Enter a valid Problem ID!")
 			return
 
 		ext = self.current_lang.get()
@@ -413,8 +488,15 @@ def main():
 
 		with open("user_info.txt", "w") as f:
 			f.write(git_repo_name)
-
-		os.system(f"git clone https://github.com/{github_username}/{git_repo_name}.git")
+		try:
+			# windows ;-;
+			if os.name == 'nt':
+				os.chmod("user_info.txt", stat.S_IREAD)
+			# linux/mac
+			else:
+				os.chmod("user_info.txt", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+		except Exception as e:
+			print(f"Could not name file read only: {e}")
 	else:
 		with open("user_info.txt", "r") as f:
 			git_repo_name = f.read().strip()
