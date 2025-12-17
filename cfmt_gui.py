@@ -281,7 +281,12 @@ class CFMT_GUI:
 				open(file_path, "w").close()
 
 		self.current_file_path = file_path
-		os.system(f'code "{file_path}"')
+		if os.name == "nt":
+			subprocess.Popen(f'code "{file_path}"',
+							 shell=True,
+							 creationflags=subprocess.CREATE_NO_WINDOW)
+		else:
+			subprocess.Popen(f'code "{file_path}"', shell=True)
 
 		self.input_box.delete("1.0", tk.END)
 		self.input_box.insert("1.0", "Paste test input here BEFORE RUNNING THE CODE...")
