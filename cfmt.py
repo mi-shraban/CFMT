@@ -1,4 +1,4 @@
-import os.path, subprocess, re, requests, stat
+import os.path, subprocess, re, requests, stat, time
 
 
 # input sanitation
@@ -123,18 +123,40 @@ def is_git_logged_in():
     return bool(name) and bool(email)
 
 
-def git_push(f, pId):
-    print(f"Adding {f} to Git")
-    os.chdir("cf_solves")
-    os.system(f"git add {f}")
-    os.system(f'git commit -m "solved {pId}"')
+def contest_time_solve(handle, pId, f):
+    l, r = 1, 500
+    data = requests.get(f"https://codeforces.com/api/user.status?handle={handle}&from={l}&count={r}").json()
+    curr_time = time.time()
+    for s in data['result']:
+        probId = f"{s['problem']['contestId']}{s['problem']['index']}"
+        verdict = s['verdict']
+        partType = s['author']['participantType']
+        subTime = s["creationTimeSeconds"]
 
-    print("Pulling latest changes...")
-    os.system("git pull --rebase --autostash")
+        if probId == pId and verdict == "OK":
+            # 8760 hrs in a year
+            if partType == "CONTESTANT" and curr_time - subTime < 3 * 60 * 60:
+                with open("contest_queue.txt", "a") as cq:
+                    cq.write(f"{f} {subTime}\n")
+                return True
+    return False
 
-    print("Pushing to GitHub...")
-    os.system(f"git push origin main")
-    os.chdir("..")
+
+def git_push(f, cf_handle, pId):
+    if not contest_time_solve(cf_handle, pId, f):
+        print(f"Adding {f} to Git")
+        os.chdir("cf_solves")
+        os.system(f"git add {f}")
+        os.system(f'git commit -m "solved {pId}"')
+
+        print("Pulling latest changes...")
+        os.system("git pull --rebase --autostash")
+
+        print("Pushing to GitHub...")
+        os.system(f"git push origin main")
+        os.chdir("..")
+    else:
+        print(f"Added {f} to Contest Queue.\nPlease push to GitHub after contest is finished.\n")
 
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -145,7 +167,7 @@ if not os.path.isfile(user_info):
 
 with open("user_info.txt", "r") as f:
     solve_folder = f.readline().strip()
-    cf_username = f.readline().strip()
+    cf_handle = f.readline().strip()
 
 directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):
@@ -173,20 +195,9 @@ while True:
         if x.lower() == 'r':
             run_code(lang, path)
         if x.lower() == 'g':
-            git_push(file, probId)
+            git_push(file, cf_handle, probId)
         if x.lower() == 'q':
             print("quitting...\n")
             break
     except Exception as e:
         print(e)
-
-
-# handle = "xordan.-"
-#
-# data = requests.get(f"https://codeforces.com/api/user.status?handle={handle}&from=1&count=500").json()
-#
-# solved = [f"{s['problem']['contestId']}{s['problem']['index']} - {s['author']['participantType']} - {s['verdict']}"
-#           for s in data['result']]
-#
-# for x in solved:
-#     print(x, end='\n')
