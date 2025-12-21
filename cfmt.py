@@ -159,6 +159,39 @@ def git_push(f, cf_handle, pId):
         print(f"Added {f} to Contest Queue.\nPlease push to GitHub after contest is finished.\n")
 
 
+def git_push_queue():
+    if not os.path.exists("contest_queue.txt"):
+        return
+    with open("contest_queue.txt", "r") as contest_queue:
+        file = [x.strip() for x in contest_queue]
+    queue = []
+    rest = []
+    curr_time = time.time()
+    for x in file:
+        fname, subtime = x.split(" ")
+        if curr_time - int(subtime) > 3 * 60 * 60:
+            queue.append(fname)
+        else:
+            rest.append(f'{x}\n')
+    # auto updates the queue.
+    if rest:
+        with open("contest_queue.txt", "w") as contest_queue:
+            contest_queue.writelines(rest)
+    else:
+        with open("contest_queue.txt", "w") as contest_queue:
+            contest_queue.write("")
+    # auto pushes from the queue after 3hr or original submission to cf contest.
+    if queue:
+        print(f"Adding {' '.join(queue)} from contest queue to Git")
+        os.chdir("cf_solves")
+        os.system(f"git add {' '.join(queue)}")
+        os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
+        os.system("git pull --rebase --autostash")
+        os.system("git push origin main")
+        os.chdir("..")
+        print(f"{' '.join(queue)} pushed to Github")
+
+
 curr_dir = os.path.dirname(os.path.abspath(__file__))
 user_info = os.path.join(curr_dir, "user_info.txt")
 
@@ -173,6 +206,7 @@ directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):
     os.makedirs(directory)
 
+git_push_queue()
 
 probId = get_valid_prob_id()
 lang = input("Enter language extension: (eg: 'cpp'/'py'): ")
