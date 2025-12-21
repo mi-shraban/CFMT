@@ -1,4 +1,4 @@
-import os.path, subprocess, re
+import os.path, subprocess, re, requests, stat
 
 
 # input sanitation
@@ -46,10 +46,25 @@ def get_valid_repo_name():
         return reponame
 
 
+def get_valid_cf_username():
+    while True:
+        handle = input("Codeforces handle: ").strip()
+        if not handle:
+            print("Codeforces username mustn't be empty.")
+            continue
+        data = requests.get(f"https://codeforces.com/api/user.info?handles={handle}&checkHistoricHandles=False").json()
+        if data["status"] == 'OK':
+            return handle
+        else:
+            print("Codeforces username wasn't found. Recheck spelling")
+            continue
+
+
 def create_user():
     print("Set up a repository for your Codeforces solutions if you haven't.")
     github_username = get_valid_user_name()
     git_repo_name = get_valid_repo_name()
+    cf_username = get_valid_cf_username()
     if not is_git_logged_in():
         print(f"--- To access Git push operation: \n"
               f"--- Download and Log into Github Desktop app from: "
@@ -57,8 +72,21 @@ def create_user():
               f"--- Otherwise, your solutions will be stored in {solve_folder}, "
               f"you can push the changes later on.")
     with open("user_info.txt", "w") as f:
-        f.write(f"{git_repo_name}")
-    os.system(f'git clone https://github.com/{github_username}/{git_repo_name}.git')
+        f.write(f"{git_repo_name}\n")
+        f.write(f"{cf_username}\n")
+    try:
+        # windows
+        if os.name == 'nt':
+            os.chmod("user_info.txt", stat.S_IREAD)
+        # linux/mac
+        else:
+            os.chmod("user_info.txt", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    except Exception as e:
+        print(f"Failed to make file read only: {e}")
+    if os.path.exists(git_repo_name) and os.path.isdir(git_repo_name):
+        print(f"{git_repo_name} folder exists in directory, skipping the cloning.")
+    else:
+        os.system(f'git clone https://github.com/{github_username}/{git_repo_name}.git')
 
 
 def open_code_file_with_template(l, p):
@@ -116,7 +144,8 @@ if not os.path.isfile(user_info):
     create_user()
 
 with open("user_info.txt", "r") as f:
-    solve_folder = f.read().strip()
+    solve_folder = f.readline().strip()
+    cf_username = f.readline().strip()
 
 directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):
@@ -150,3 +179,14 @@ while True:
             break
     except Exception as e:
         print(e)
+
+
+# handle = "xordan.-"
+#
+# data = requests.get(f"https://codeforces.com/api/user.status?handle={handle}&from=1&count=500").json()
+#
+# solved = [f"{s['problem']['contestId']}{s['problem']['index']} - {s['author']['participantType']} - {s['verdict']}"
+#           for s in data['result']]
+#
+# for x in solved:
+#     print(x, end='\n')
