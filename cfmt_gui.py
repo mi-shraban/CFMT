@@ -4,6 +4,7 @@ import subprocess
 import threading
 import re
 import stat
+import requests
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 import ttkbootstrap as ttk
@@ -47,7 +48,7 @@ class UserInfoDialog(tk.Toplevel):
 	def __init__(self, parent):
 		super().__init__(parent)
 		self.title("CF Repo Setup")
-		self.geometry("450x250")
+		self.geometry("450x300")
 		self.resizable(False, False)
 		self.iconbitmap("codeforces.ico")
 
@@ -59,10 +60,15 @@ class UserInfoDialog(tk.Toplevel):
 		self.repo_entry = ttk.Entry(self, width=40)
 		self.repo_entry.pack()
 
+		ttk.Label(self, text="CF Username:", font=("Segoe UI", 11)).pack(pady=10)
+		self.cf_handle_entry = ttk.Entry(self, width=40)
+		self.cf_handle_entry.pack()
+
 		ttk.Button(self, text="OK", command=self.submit).pack(pady=15)
 
 		self.username = None
 		self.repo = None
+		self.cf_handle = None
 		self.grab_set()
 
 	@staticmethod
@@ -88,9 +94,20 @@ class UserInfoDialog(tk.Toplevel):
 			return False, "This doesn't look like a valid Repository name."
 		return True, reponame
 
+	@staticmethod
+	def validate_cf_handle(cf_handle):
+		if not cf_handle:
+			return False, "Coderforces handle mustn't be empty."
+		data = requests.get(f"https://codeforces.com/api/user.info?handles={cf_handle}&checkHistoricHandles=False").json()
+		if data["status"] == 'OK':
+			return True, ""
+		else:
+			return False, "Codeforces username wasn't found. Recheck spelling"
+
 	def submit(self):
 		username = self.username_entry.get().strip()
 		repo = self.repo_entry.get().strip()
+		cf_handle = self.cf_handle_entry.get().strip()
 		# Validate username
 		is_valid, error_msg = self.validate_username(username)
 		if not is_valid:
@@ -100,6 +117,10 @@ class UserInfoDialog(tk.Toplevel):
 		is_valid, reponame = self.validate_repo_name(repo)
 		if not is_valid:
 			messagebox.showwarning("Invalid Repository Name", reponame)
+			return
+		is_valid, error_msg = self.validate_cf_handle(cf_handle)
+		if not is_valid:
+			messagebox.showwarning("Invalid CF Handle", error_msg)
 			return
 
 		if os.path.exists(reponame) and os.path.isdir(reponame):
@@ -112,6 +133,7 @@ class UserInfoDialog(tk.Toplevel):
 			if use_existing:
 				self.username = username
 				self.repo = reponame
+				self.cf_handle = cf_handle
 				self.destroy()
 				return
 			else:
@@ -130,17 +152,19 @@ class UserInfoDialog(tk.Toplevel):
 				sys.exit(1)
 		self.username = username
 		self.repo = reponame
+		self.cf_handle = cf_handle
 		self.destroy()
 
 
 class CFMT_GUI:
-	def __init__(self, root, folder):
+	def __init__(self, root, folder, cf_handle):
 		self.root = root
 		self.current_file_path = None
 		self.current_lang = tk.StringVar(value='py')
 		self.git_thread = None
 
 		self.solve_folder = folder
+		self.cf_handle = cf_handle
 		self.available_themes = [
 			'litera', 'flatly', 'minty', 'sandstone', 'morph',
 			'solar', 'superhero', 'darkly', 'cyborg', 'vapor'
@@ -481,13 +505,15 @@ def main():
 
 		github_username = dialog.username
 		git_repo_name = dialog.repo
+		cf_handle = dialog.cf_handle
 
 		if not github_username or not git_repo_name:
 			messagebox.showerror("Error", "Both fields are required.")
 			sys.exit(1)
 
 		with open("user_info.txt", "w") as f:
-			f.write(git_repo_name)
+			f.write(git_repo_name+'\n')
+			f.write(cf_handle+'\n')
 		try:
 			# windows ;-;
 			if os.name == 'nt':
@@ -496,14 +522,15 @@ def main():
 			else:
 				os.chmod("user_info.txt", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 		except Exception as e:
-			print(f"Could not name file read only: {e}")
+			print(f"Failed to make file read only: {e}")
 	else:
 		with open("user_info.txt", "r") as f:
-			git_repo_name = f.read().strip()
+			git_repo_name = f.readline().strip()
+			cf_handle = f.readline().strip()
 
 	# Now show the main GUI
 	root.deiconify()
-	app = CFMT_GUI(root, git_repo_name)
+	app = CFMT_GUI(root, git_repo_name, cf_handle)
 	root.mainloop()
 
 
