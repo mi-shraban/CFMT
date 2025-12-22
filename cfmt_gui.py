@@ -1,47 +1,8 @@
-import sys
-import os
-import subprocess
-import threading
-import re
-import stat
-import requests
+import sys, os, subprocess, threading, re, stat, requests, time
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 import ttkbootstrap as ttk
 from ttkbootstrap.widgets.scrolled import ScrolledText
-
-
-class GitPushThread(threading.Thread):
-	def __init__(self, file_path, prob_id, solve_folder, output_callback, finished_callback):
-		super().__init__(daemon=True)
-		self.file_path = file_path
-		self.prob_id = prob_id
-		self.solve_folder = solve_folder
-		self.output_callback = output_callback
-		self.finished_callback = finished_callback
-
-	def run(self):
-		try:
-			os.chdir(self.solve_folder)
-
-			self.output_callback(f"Adding {os.path.basename(self.file_path)}...\n")
-			os.system(f"git add {os.path.basename(self.file_path)}")
-
-			self.output_callback(f"Committing solved {self.prob_id}...\n")
-			os.system(f'git commit -m "solved {self.prob_id}"')
-
-			self.output_callback("Pulling latest changes...\n")
-			os.system("git pull --rebase --autostash")
-
-			self.output_callback("Pushing to GitHub...\n")
-			os.system("git push origin main")
-
-			os.chdir("..")
-			self.output_callback("Completed.\n\n\n")
-		except Exception as e:
-			self.output_callback(f"Error: {str(e)}\n")
-		finally:
-			self.finished_callback()
 
 
 class UserInfoDialog(tk.Toplevel):
@@ -50,7 +11,10 @@ class UserInfoDialog(tk.Toplevel):
 		self.title("CF Repo Setup")
 		self.geometry("450x300")
 		self.resizable(False, False)
-		self.iconbitmap("codeforces.ico")
+		try:
+			self.iconbitmap("codeforces.ico")
+		except Exception as e:
+			pass
 
 		ttk.Label(self, text="GitHub Username:", font=("Segoe UI", 11)).pack(pady=10)
 		self.username_entry = ttk.Entry(self, width=40)
@@ -156,6 +120,75 @@ class UserInfoDialog(tk.Toplevel):
 		self.destroy()
 
 
+class GitPushThread(threading.Thread):
+	def __init__(self, file_path, prob_id, solve_folder, cf_handle, output_callback, finished_callback):
+		super().__init__(daemon=True)
+		self.file_path = file_path
+		self.prob_id = prob_id
+		self.solve_folder = solve_folder
+		self.cf_handle = cf_handle
+		self.output_callback = output_callback
+		self.finished_callback = finished_callback
+
+	def contest_time_solve(self):
+		try:
+			l, r = 1, 8
+			data = requests.get(f"https://codeforces.com/api/user.status?handle={self.cf_handle}&from={l}&count={r}").json()
+
+			curr_time = time.time()
+			file_name = os.path.basename(self.file_path)
+
+			for s in data['result']:
+				probId = f"{s['problem']['contestId']}{s['problem']['index']}"
+				verdict = s['verdict']
+				partType = s['author']['participantType']
+				subTime = s["creationTimeSeconds"]
+
+				if probId == self.prob_id and verdict == 'OK':
+					# 8760 hrs in a year
+					if partType == 'CONTESTANT' and curr_time - subTime < 3 * 60 * 60:
+						with open("contest_queue.txt", "a") as cq:
+							cq.write(f"{file_name} {subTime}\n")
+						return True
+			return False
+		except Exception as e:
+			self.output_callback(f"Error checking contest time: {e}\n")
+			return False
+
+	def run(self):
+		try:
+			if self.contest_time_solve():
+				self.output_callback(
+					f"Added {os.path.basename(self.file_path)} to Contest Queue, due to it being a Contest Solution.\n"
+					f"Eligible to be pushed to GitHub in 3 hours from submission.\n"
+					f"Will be pushed to Github when you run CFMT after 3 hours or later.\n"
+				)
+				self.finished_callback()
+				return
+
+			# Normal git push flow
+			os.chdir(self.solve_folder)
+
+			self.output_callback(f"Adding {os.path.basename(self.file_path)}...\n")
+			os.system(f"git add {os.path.basename(self.file_path)}")
+
+			self.output_callback(f"Committing solved {self.prob_id}...\n")
+			os.system(f'git commit -m "solved {self.prob_id}"')
+
+			self.output_callback("Pulling latest changes...\n")
+			os.system("git pull --rebase --autostash")
+
+			self.output_callback("Pushing to GitHub...\n")
+			os.system("git push origin main")
+
+			os.chdir("..")
+			self.output_callback("Completed.\n\n\n")
+		except Exception as e:
+			self.output_callback(f"Error: {str(e)}\n")
+		finally:
+			self.finished_callback()
+
+
 class CFMT_GUI:
 	def __init__(self, root, folder, cf_handle):
 		self.root = root
@@ -165,12 +198,14 @@ class CFMT_GUI:
 
 		self.solve_folder = folder
 		self.cf_handle = cf_handle
+
 		self.available_themes = [
 			'litera', 'flatly', 'minty', 'sandstone', 'morph',
 			'solar', 'superhero', 'darkly', 'cyborg', 'vapor'
 		]
 		# 5 light themes, 5 dark themes
 		self.init_ui()
+		self.root.after(500, self.git_push_queue)
 
 	def init_ui(self):
 		self.root.title("CFMT - Codeforces Management Tool")
@@ -456,7 +491,8 @@ class CFMT_GUI:
 		except Exception as e:
 			self.append_log(f"\nRuntime Error: {str(e)}\n")
 
-	def is_git_logged_in(self):
+	@staticmethod
+	def is_git_logged_in():
 		name = subprocess.getoutput("git config --global user.name").strip()
 		email = subprocess.getoutput("git config --global user.email").strip()
 		return bool(name) and bool(email)
@@ -477,10 +513,54 @@ class CFMT_GUI:
 			self.current_file_path,
 			prob_id,
 			self.solve_folder,
+			self.cf_handle,
 			on_output,
 			on_finished
 		)
 		self.git_thread.start()
+
+	def git_push_queue(self):
+		if not os.path.isfile("contest_queue.txt"):
+			return
+		with open("contest_queue.txt", "r") as contest_queue:
+			file = [x.strip() for x in contest_queue]
+		queue = set()
+		rem_queue = set()
+		curr_time = time.time()
+		for x in file:
+			fname, subtime = x.split(' ')
+			if curr_time - int(subtime) > 3 * 60 * 60:
+				queue.add(fname)
+			else:
+				rem_queue.add(f"{x}\n")
+		if rem_queue:
+			with open("contest_queue.txt", "w") as contest_queue:
+				contest_queue.writelines(rem_queue)
+		else:
+			with open("contest_queue.txt", "w") as contest_queue:
+				contest_queue.write("")
+		if queue:
+			self.append_log(f"--- Pushing from Contest Queue ---\n")
+			os.chdir(self.solve_folder)
+
+			self.append_log(f"Adding files: {', '.join(queue)}\n")
+			os.system(f"git add {' '.join(queue)}")
+
+			self.append_log(f"Committing 'solved contest problems {' '.join(queue)}'\n")
+			os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
+
+			self.append_log("Pulling latest changes...\n")
+			os.system("git pull --rebase --autostash")
+
+			self.append_log("Pushing to GitHub...\n")
+			os.system("git push origin main")
+			os.chdir("..")
+
+			self.append_log(f"{', '.join(queue)} pushed to Github\n")
+		if rem_queue:
+			self.append_log(f"--- Contest Queue Updated ---\n")
+		else:
+			self.append_log(f"--- Contest Queue Cleared ---\n")
 
 
 def main():

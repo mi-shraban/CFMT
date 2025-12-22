@@ -124,7 +124,7 @@ def is_git_logged_in():
 
 
 def contest_time_solve(handle, pId, f):
-    l, r = 1, 500
+    l, r = 1, 8
     data = requests.get(f"https://codeforces.com/api/user.status?handle={handle}&from={l}&count={r}").json()
     curr_time = time.time()
     for s in data['result']:
@@ -165,18 +165,18 @@ def git_push_queue():
     with open("contest_queue.txt", "r") as contest_queue:
         file = [x.strip() for x in contest_queue]
     queue = []
-    rest = []
+    rem_queue = []
     curr_time = time.time()
     for x in file:
         fname, subtime = x.split(" ")
         if curr_time - int(subtime) > 3 * 60 * 60:
             queue.append(fname)
         else:
-            rest.append(f'{x}\n')
+            rem_queue.append(f'{x}\n')
     # auto updates the queue.
-    if rest:
+    if rem_queue:
         with open("contest_queue.txt", "w") as contest_queue:
-            contest_queue.writelines(rest)
+            contest_queue.writelines(rem_queue)
     else:
         with open("contest_queue.txt", "w") as contest_queue:
             contest_queue.write("")
