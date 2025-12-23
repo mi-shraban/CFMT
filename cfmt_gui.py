@@ -189,6 +189,65 @@ class GitPushThread(threading.Thread):
 			self.finished_callback()
 
 
+class GitPushQueueThread(threading.Thread):
+	def __init__(self, solve_folder, output_callback):
+		super().__init__(daemon=True)
+		self.solve_folder = solve_folder
+		self.output_callback = output_callback
+
+	def run(self):
+		try:
+			if not os.path.isfile("contest_queue.txt"):
+				return
+
+			with open("contest_queue.txt", "r") as contest_queue:
+				file = [x.strip() for x in contest_queue]
+
+			if not file:
+				return
+
+			queue = set()
+			rem_queue = set()
+			curr_time = time.time()
+
+			for x in file:
+				fname, subtime = x.split(' ')
+				if curr_time - int(subtime) > 3 * 60 * 60:
+					queue.add(fname)
+				else:
+					rem_queue.add(f"{x}\n")
+			if rem_queue:
+				with open("contest_queue.txt", "w") as contest_queue:
+					contest_queue.writelines(rem_queue)
+			else:
+				with open("contest_queue.txt", "w") as contest_queue:
+					contest_queue.write("")
+			if queue:
+				self.output_callback(f"--- Pushing from Contest Queue ---\n")
+				os.chdir(self.solve_folder)
+
+				self.output_callback(f"Adding files: {', '.join(queue)}\n")
+				os.system(f"git add {' '.join(queue)}")
+
+				self.output_callback(f"Committing 'solved contest problems {' '.join(queue)}'\n")
+				os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
+
+				self.output_callback("Pulling latest changes...\n")
+				os.system("git pull --rebase --autostash")
+
+				self.output_callback("Pushing to GitHub...\n")
+				os.system("git push origin main")
+				os.chdir("..")
+
+				self.output_callback(f"{', '.join(queue)} pushed to Github\n")
+			if rem_queue:
+				self.output_callback(f"--- Contest Queue Updated ---\n")
+			else:
+				self.output_callback(f"--- Contest Queue Cleared ---\n")
+		except Exception as e:
+			self.output_callback(f"Failed to process queue. Error: {str(e)}\n")
+
+
 class CFMT_GUI:
 	def __init__(self, root, folder, cf_handle):
 		self.root = root
@@ -205,7 +264,7 @@ class CFMT_GUI:
 		]
 		# 5 light themes, 5 dark themes
 		self.init_ui()
-		self.root.after(500, self.git_push_queue)
+		self.root.after(500, self.start_processing_queue)
 
 	def init_ui(self):
 		self.root.title("CFMT - Codeforces Management Tool")
@@ -519,48 +578,11 @@ class CFMT_GUI:
 		)
 		self.git_thread.start()
 
-	def git_push_queue(self):
-		if not os.path.isfile("contest_queue.txt"):
-			return
-		with open("contest_queue.txt", "r") as contest_queue:
-			file = [x.strip() for x in contest_queue]
-		queue = set()
-		rem_queue = set()
-		curr_time = time.time()
-		for x in file:
-			fname, subtime = x.split(' ')
-			if curr_time - int(subtime) > 3 * 60 * 60:
-				queue.add(fname)
-			else:
-				rem_queue.add(f"{x}\n")
-		if rem_queue:
-			with open("contest_queue.txt", "w") as contest_queue:
-				contest_queue.writelines(rem_queue)
-		else:
-			with open("contest_queue.txt", "w") as contest_queue:
-				contest_queue.write("")
-		if queue:
-			self.append_log(f"--- Pushing from Contest Queue ---\n")
-			os.chdir(self.solve_folder)
-
-			self.append_log(f"Adding files: {', '.join(queue)}\n")
-			os.system(f"git add {' '.join(queue)}")
-
-			self.append_log(f"Committing 'solved contest problems {' '.join(queue)}'\n")
-			os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
-
-			self.append_log("Pulling latest changes...\n")
-			os.system("git pull --rebase --autostash")
-
-			self.append_log("Pushing to GitHub...\n")
-			os.system("git push origin main")
-			os.chdir("..")
-
-			self.append_log(f"{', '.join(queue)} pushed to Github\n")
-		if rem_queue:
-			self.append_log(f"--- Contest Queue Updated ---\n")
-		else:
-			self.append_log(f"--- Contest Queue Cleared ---\n")
+	def start_processing_queue(self):
+		def on_output(text):
+			self.root.after(0, lambda: self.append_log(text))
+		queue_thread = GitPushQueueThread(self.solve_folder, on_output)
+		queue_thread.start()
 
 
 def main():
