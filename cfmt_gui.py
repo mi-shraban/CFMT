@@ -1,8 +1,42 @@
-import sys, os, subprocess, threading, re, stat, requests, time
+import sys, os, subprocess, threading, re, stat, requests, time, json
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 import ttkbootstrap as ttk
 from ttkbootstrap.widgets.scrolled import ScrolledText
+
+USER_CONFIG_FILE = "user_config.json"
+CONTEST_QUEUE_FILE = "contest_queue.json"
+
+
+def load_user_config():
+	if not os.path.isfile(USER_CONFIG_FILE):
+		return None
+	with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
+		return json.load(f)
+
+
+def save_user_config(cfg):
+	with open(USER_CONFIG_FILE, "w", encoding="utf-8") as f:
+		json.dump(cfg, f, indent=4)
+
+
+def validate_user_config(cfg):
+	required_keys = ("github_username", "git_repo_name", "cf_username")
+	if not isinstance(cfg, dict):
+		return False
+	return all(k in cfg and isinstance(cfg[k], str) for k in required_keys)
+
+
+def load_queue():
+	if not os.path.isfile(CONTEST_QUEUE_FILE):
+		return {}
+	with open(CONTEST_QUEUE_FILE, "r", encoding="utf-8") as f:
+		return json.load(f)
+
+
+def save_queue(cfg):
+	with open(CONTEST_QUEUE_FILE, "w", encoding="utf-8") as f:
+		json.dump(cfg, f, indent=4)
 
 
 class UserInfoDialog(tk.Toplevel):
@@ -62,7 +96,8 @@ class UserInfoDialog(tk.Toplevel):
 	def validate_cf_handle(cf_handle):
 		if not cf_handle:
 			return False, "Coderforces handle mustn't be empty."
-		data = requests.get(f"https://codeforces.com/api/user.info?handles={cf_handle}&checkHistoricHandles=False").json()
+		data = requests.get(
+			f"https://codeforces.com/api/user.info?handles={cf_handle}&checkHistoricHandles=False").json()
 		if data["status"] == 'OK':
 			return True, ""
 		else:
@@ -106,10 +141,10 @@ class UserInfoDialog(tk.Toplevel):
 		clone_res = os.system(f"git clone https://github.com/{username}/{reponame}.git")
 		if clone_res:
 			retry = messagebox.askretrycancel("Repository Not Found\n",
-								f"Failed to clone github.com/{username}{reponame}\n"
-								f"-- Check if the Repository exists.\n"
-								f"-- Recheck the spellings\n"
-								f"-- Check internet connection\n")
+											  f"Failed to clone github.com/{username}{reponame}\n"
+											  f"-- Check if the Repository exists.\n"
+											  f"-- Recheck the spellings\n"
+											  f"-- Check internet connection\n")
 			if retry:
 				return
 			else:
@@ -132,21 +167,33 @@ class GitPushThread(threading.Thread):
 
 	def contest_time_solve(self):
 		try:
-			l, r = 1, 8
-			data = requests.get(f"https://codeforces.com/api/user.status?handle={self.cf_handle}&from={l}&count={r}").json()
+			submission_list = requests.get(
+				f"https://codeforces.com/api/user.status?"
+				f"handle={self.cf_handle}&from={1}&count={15}"
+			).json()
+			contest_list = requests.get(
+				"https://codeforces.com/api/contest.list?gym=false"
+			).json
 
-			curr_time = int(time.time())
+			queue = load_queue()
 			file_name = os.path.basename(self.file_path)
 
-			for s in data['result']:
-				probId = f"{s['problem']['contestId']}{s['problem']['index']}"
-				verdict = s['verdict']
-				partType = s['author']['participantType']
-				contestStart = curr_time - s["relativeTimeSeconds"]
+			for s in submission_list['result']:
+				problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
+				if (
+						problemId != self.prob_id
+						or s['verdict'] != 'OK'
+						or s['author']['participantType'] != "CONTESTANT"
+				):
+					continue
 
-				if probId == self.prob_id and verdict == 'OK' and partType == 'CONTESTANT':
-					with open("contest_queue.txt", "a") as cq:
-						cq.write(f"{file_name} {contestStart}\n")
+				contestId = f"{s['problem']['contestId']}"
+				for c in contest_list['result']:
+					if c['id'] == contestId:
+						contest_end = c['startTimeSeconds'] + c['durationSeconds']
+						if file_name not in queue:
+							queue[file_name] = contest_end
+							save_queue(queue)
 					return True
 			return False
 		except Exception as e:
@@ -158,8 +205,7 @@ class GitPushThread(threading.Thread):
 			if self.contest_time_solve():
 				self.output_callback(
 					f"Added {os.path.basename(self.file_path)} to Contest Queue, due to it being a Contest Solution.\n"
-					f"Eligible to be pushed to GitHub in 3 hours from submission.\n"
-					f"Will be pushed to Github when you run CFMT after 3 hours or later.\n"
+					f"Queued solutions will be auto pushed to Github on Restart after contest is finished."
 				)
 				self.finished_callback()
 				return
@@ -194,56 +240,52 @@ class GitPushQueueThread(threading.Thread):
 		self.output_callback = output_callback
 
 	def run(self):
+		curr_time = int(time.time())
 		try:
-			if not os.path.isfile("contest_queue.txt"):
+			queue = load_queue()
+			if not queue:
 				return
 
-			with open("contest_queue.txt", "r") as contest_queue:
-				file = [x.strip() for x in contest_queue]
+			ready = []
+			pending = {}
 
-			if not file:
-				return
-
-			queue = set()
-			rem_queue = set()
-			curr_time = int(time.time())
-
-			for x in file:
-				fname, contestStart = x.split(' ')
-				if curr_time - contestStart > 5 * 60 * 60:
-					queue.add(fname)
+			for fname, contest_end in queue.items():
+				if curr_time >= contest_end:
+					ready.append(fname)
 				else:
-					rem_queue.add(f"{x}\n")
-			if rem_queue:
-				with open("contest_queue.txt", "w") as contest_queue:
-					contest_queue.writelines(rem_queue)
+					pending[fname] = contest_end
+
+			if not ready:
+				return
+
+			self.output_callback(f"--- Pushing from Contest Queue ---\n")
+			os.chdir(self.solve_folder)
+
+			self.output_callback(f"Adding {', '.join(prob.split('.')[0] for prob in ready)} "
+								 f"from contest queue to Git\n")
+			os.system(f"git add {' '.join(ready)}")
+
+			self.output_callback(f"Committing 'solved contest problems "
+								 f"{', '.join(prob.split('.')[0] for prob in ready)}'\n")
+			os.system(f'git commit -m "solved contest problems '
+					  f'{", ".join(prob.split(".")[0] for prob in ready)}"')
+
+			self.output_callback("Pulling latest changes...\n")
+			os.system("git pull --rebase --autostash")
+
+			self.output_callback("Pushing to GitHub...\n")
+			os.system("git push origin main")
+
+			os.chdir("..")
+			self.output_callback(f"{', '.join(prob.split('.')[0] for prob in ready)} "
+								 f"pushed to Github\n")
+			save_queue(pending)
+			if pending:
+				self.output_callback(f"--- Contest Queue Updated ---\n\n")
 			else:
-				with open("contest_queue.txt", "w") as contest_queue:
-					contest_queue.write("")
-			if queue:
-				self.output_callback(f"--- Pushing from Contest Queue ---\n")
-				os.chdir(self.solve_folder)
-
-				self.output_callback(f"Adding files: {', '.join(queue)}\n")
-				os.system(f"git add {' '.join(queue)}")
-
-				self.output_callback(f"Committing 'solved contest problems {' '.join(queue)}'\n")
-				os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
-
-				self.output_callback("Pulling latest changes...\n")
-				os.system("git pull --rebase --autostash")
-
-				self.output_callback("Pushing to GitHub...\n")
-				os.system("git push origin main")
-				os.chdir("..")
-
-				self.output_callback(f"{', '.join(queue)} pushed to Github\n")
-			if rem_queue:
-				self.output_callback(f"--- Contest Queue Updated ---\n")
-			else:
-				self.output_callback(f"--- Contest Queue Cleared ---\n")
+				self.output_callback(f"--- Contest Queue Cleared ---\n\n")
 		except Exception as e:
-			self.output_callback(f"Failed to process queue. Error: {str(e)}\n")
+			self.output_callback(f"Failed to process queue. Error: {str(e)}\n\n")
 
 
 class CFMT_GUI:
@@ -268,7 +310,10 @@ class CFMT_GUI:
 		self.root.title("CFMT - Codeforces Management Tool")
 		self.root.geometry("1440x720")
 
-		self.root.iconbitmap("codeforces.ico")
+		try:
+			self.root.iconbitmap("codeforces.ico")
+		except Exception as e:
+			pass
 
 		# Main container
 		main_frame = ttk.Frame(self.root, padding="20")
@@ -313,7 +358,7 @@ class CFMT_GUI:
 		self.prob_input = ttk.Entry(prob_frame, font=("Segoe UI", 10))
 		self.prob_input.insert(0, "e.g., 2160B")
 		self.prob_input.bind("<FocusIn>", lambda e: self.prob_input.delete(0, tk.END)
-							if self.prob_input.get() == "e.g., 2160B" else None)
+		if self.prob_input.get() == "e.g., 2160B" else None)
 		self.prob_input.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
 
 		# Language selection
@@ -579,6 +624,7 @@ class CFMT_GUI:
 	def start_processing_queue(self):
 		def on_output(text):
 			self.root.after(0, lambda: self.append_log(text))
+
 		queue_thread = GitPushQueueThread(self.solve_folder, on_output)
 		queue_thread.start()
 
@@ -597,36 +643,30 @@ def main():
 
 	# Create root FIRST (hidden)
 	root = ttk.Window(themename=default_theme)
-	root.withdraw()   # << Hide the main window
+	root.withdraw()  # << Hide the main window
 
-	if not os.path.exists("user_info.txt"):
-		dialog = UserInfoDialog(root)
-		root.wait_window(dialog)
+	user_config = load_user_config()
+	if user_config is None or not validate_user_config(user_config):
+		dialogue = UserInfoDialog(root)
+		root.wait_window(dialogue)
 
-		github_username = dialog.username
-		git_repo_name = dialog.repo
-		cf_handle = dialog.cf_handle
+		github_username = dialogue.username
+		git_repo_name = dialogue.repo
+		cf_handle = dialogue.cf_handle
 
-		if not github_username or not git_repo_name:
-			messagebox.showerror("Error", "Both fields are required.")
+		if not github_username or not git_repo_name or not cf_handle:
+			messagebox.showerror("Error", "All fields are required.")
 			sys.exit(1)
 
-		with open("user_info.txt", "w") as f:
-			f.write(git_repo_name+'\n')
-			f.write(cf_handle+'\n')
-		try:
-			# windows ;-;
-			if os.name == 'nt':
-				os.chmod("user_info.txt", stat.S_IREAD)
-			# linux/mac
-			else:
-				os.chmod("user_info.txt", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-		except Exception as e:
-			print(f"Failed to make file read only: {e}")
-	else:
-		with open("user_info.txt", "r") as f:
-			git_repo_name = f.readline().strip()
-			cf_handle = f.readline().strip()
+		user_config = {
+			"github_username": github_username,
+			"git_repo_name": git_repo_name,
+			"cf_username": cf_handle
+		}
+		save_user_config(user_config)
+
+	git_repo_name = user_config["git_repo_name"]
+	cf_handle = user_config["cf_username"]
 
 	# Now show the main GUI
 	root.deiconify()

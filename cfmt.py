@@ -112,14 +112,9 @@ def create_user():
 
 
 def open_code_file_with_template(l, p):
-    if l == 'py':
-        if not os.path.isfile(p):
-            with open('py_template.txt', 'r') as template, open(p, 'w') as cf_file:
-                cf_file.write(template.read())
-    elif l == 'cpp':
-        if not os.path.isfile(p):
-            with open('cpp_template.txt', 'r') as template, open(p, 'w') as cf_file:
-                cf_file.write(template.read())
+    if not os.path.isfile(p):
+        with open(f'{l}_template.txt', 'r') as template, open(p, 'w') as cf_file:
+            cf_file.write(template.read())
 
 
 def compile_code(l, p):
@@ -179,8 +174,8 @@ def contest_time_solve(handle, pId, f):
         for c in contest_list['result']:
             if c['id'] == contestId:
                 contest_end = c['startTimeSeconds'] + c['durationSeconds']
-                if problemId not in queue:
-                    queue[problemId] = contest_end
+                if f not in queue:
+                    queue[f] = contest_end
                     save_queue(queue)
         return True
     return False
@@ -200,7 +195,8 @@ def git_push(f, cf_handle, pId):
         os.system(f"git push origin main")
         os.chdir("..")
     else:
-        print(f"Added {f} to Contest Queue.\nPlease push to GitHub after contest is finished.\n")
+        print(f"Added {f} to Contest Queue.\n"
+              f"Queued solutions will be auto pushed to Github on Restart after contest is finished.\n")
 
 
 def git_push_queue():
@@ -222,7 +218,7 @@ def git_push_queue():
 
     print(f"Adding {', '.join(ready)} from contest queue to Git")
 
-    os.chdir("cf_solves")
+    os.chdir(f"{solve_folder}")
     os.system(f"git add {' '.join(ready)}")
     os.system(f'git commit -m "solved contest problems '
               f'{", ".join(prob.split(".")[0] for prob in ready)}"')
