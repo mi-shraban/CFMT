@@ -1,4 +1,8 @@
-import os.path, subprocess, re, requests, stat, time
+import os.path, json, subprocess, re, requests, stat, time
+from fileinput import filename
+
+USER_CONFIG_FILE = "user_config.json"
+CONTEST_QUEUE_FILE = "contest_queue.json"
 
 
 # input sanitation
@@ -60,29 +64,47 @@ def get_valid_cf_username():
             continue
 
 
+def load_user_config():
+    if not os.path.isfile(USER_CONFIG_FILE):
+        return None
+    with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_user_config(cfg):
+    with open(USER_CONFIG_FILE, 'w', encoding="utf-8") as f:
+        json.dump(cfg, f, indent=4)
+
+
+def validate_user_config(cfg):
+    required_keys = ("github_username", "git_repo_name", "cf_username")
+    if not isinstance(cfg, dict):
+        return False
+    return all(k in cfg and isinstance(cfg[k], str) for k in required_keys)
+
+
 def create_user():
     print("Set up a repository for your Codeforces solutions if you haven't.")
+
     github_username = get_valid_user_name()
     git_repo_name = get_valid_repo_name()
     cf_username = get_valid_cf_username()
+
     if not is_git_logged_in():
         print(f"--- To access Git push operation: \n"
               f"--- Download and Log into Github Desktop app from: "
               f"'https://desktop.github.com/download/'\n"
-              f"--- Otherwise, your solutions will be stored in {solve_folder}, "
-              f"you can push the changes later on.")
-    with open("user_info.txt", "w") as f:
-        f.write(f"{git_repo_name}\n")
-        f.write(f"{cf_username}\n")
-    try:
-        # windows
-        if os.name == 'nt':
-            os.chmod("user_info.txt", stat.S_IREAD)
-        # linux/mac
-        else:
-            os.chmod("user_info.txt", stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-    except Exception as e:
-        print(f"Failed to make file read only: {e}")
+              f"--- Otherwise, your solutions will be stored in {git_repo_name}, "
+              f"you can push the changes later on."
+        )
+
+    user_config = {
+        "github_username": github_username,
+        "git_repo_name": git_repo_name,
+        "cf_username": cf_username,
+    }
+    save_user_config(user_config)
+
     if os.path.exists(git_repo_name) and os.path.isdir(git_repo_name):
         print(f"{git_repo_name} folder exists in directory, skipping the cloning.")
     else:
@@ -123,22 +145,62 @@ def is_git_logged_in():
     return bool(name) and bool(email)
 
 
-def contest_time_solve(handle, pId, f):
-    l, r = 1, 8
-    data = requests.get(f"https://codeforces.com/api/user.status?handle={handle}&from={l}&count={r}").json()
-    curr_time = time.time()
-    for s in data['result']:
-        probId = f"{s['problem']['contestId']}{s['problem']['index']}"
-        verdict = s['verdict']
-        partType = s['author']['participantType']
-        subTime = s["creationTimeSeconds"]
+def load_queue():
+    if not os.path.isfile(CONTEST_QUEUE_FILE):
+        return []
+    with open(CONTEST_QUEUE_FILE, 'r', encoding="utf-8") as f:
+        return json.load(f)
 
-        if probId == pId and verdict == "OK":
-            # 8760 hrs in a year
-            if partType == "CONTESTANT" and curr_time - subTime < 3 * 60 * 60:
-                with open("contest_queue.txt", "a") as cq:
-                    cq.write(f"{f} {subTime}\n")
-                return True
+
+def save_queue(queue):
+    with open(CONTEST_QUEUE_FILE, 'w', encoding="utf-8") as f:
+        json.dump(queue, f, indent=4)
+
+
+def contest_time_solve(handle, pId, f):
+    l, r = 1, 10
+
+    data = requests.get(
+        f"https://codeforces.com/api/user.status?"
+        f"handle={handle}&from={l}&count={r}"
+    ).json()
+
+    curr_time = time.time()
+    queue = load_queue()
+
+    for s in data['result']:
+        problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
+        if (
+            problemId != pId
+            or s['verdict'] != 'OK'
+            or s['author']['participantType'] != "CONTESTANT"
+        ):
+            continue
+
+        contest_id = f"{s['problem']['contestId']}"
+        contest_start = curr_time - s["relativeTimeSeconds"]
+
+        contest = None
+        for c in queue:
+            if c['contestId'] == contest_id and c['pending']:
+                contest = c
+                break
+
+        if contest is None:
+            contest_length = int(input("Enter Contest length (in Hours, eg.: 2): "))
+            contest = {
+                'pending': True,
+                'contestId': contest_id,
+                'contestStart': contest_start,
+                'contestLength': contest_length,
+                'solved': {}
+            }
+            queue.append(contest)
+
+        if problemId not in contest['solved']:
+            contest['solved'][problemId] = f
+            save_queue(queue)
+        return True
     return False
 
 
@@ -160,47 +222,50 @@ def git_push(f, cf_handle, pId):
 
 
 def git_push_queue():
-    if not os.path.exists("contest_queue.txt"):
+    curr_time = int(time.time())
+    updated = False
+    queue = load_queue()
+    if not queue:
         return
-    with open("contest_queue.txt", "r") as contest_queue:
-        file = [x.strip() for x in contest_queue]
-    queue = []
-    rem_queue = []
-    curr_time = time.time()
-    for x in file:
-        fname, subtime = x.split(" ")
-        if curr_time - int(subtime) > 3 * 60 * 60:
-            queue.append(fname)
-        else:
-            rem_queue.append(f'{x}\n')
-    # auto updates the queue.
-    if rem_queue:
-        with open("contest_queue.txt", "w") as contest_queue:
-            contest_queue.writelines(rem_queue)
-    else:
-        with open("contest_queue.txt", "w") as contest_queue:
-            contest_queue.write("")
-    # auto pushes from the queue after 3hr or original submission to cf contest.
-    if queue:
-        print(f"Adding {' '.join(queue)} from contest queue to Git")
+
+    for contest in queue:
+        if not contest['pending']:
+            continue
+
+        contest_start = queue['contestStart']
+        contest_length = queue['contestLength'] * 60 * 60
+        contest_end = contest_start + contest_length
+
+        if curr_time < contest_end:
+            return
+
+        solved_files = list(contest['solved'].values())
+
+        print(f"Adding {' '.join(solved_files)} from contest queue to Git")
         os.chdir("cf_solves")
-        os.system(f"git add {' '.join(queue)}")
-        os.system(f'git commit -m "solved contest problems {" ".join(queue)}"')
+        os.system(f"git add {' '.join(solved_files)}")
+        os.system(f'git commit -m "solved contest problems {" ".join(solved_files)}"')
         os.system("git pull --rebase --autostash")
         os.system("git push origin main")
         os.chdir("..")
+
+        queue['pending'] = False
+        updated = True
         print(f"{' '.join(queue)} pushed to Github")
+
+    if updated:
+        save_queue(queue)
 
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
-user_info = os.path.join(curr_dir, "user_info.txt")
 
-if not os.path.isfile(user_info):
+user_config = load_user_config()
+if user_config is None:
     create_user()
+    user_config = load_user_config()
 
-with open("user_info.txt", "r") as f:
-    solve_folder = f.readline().strip()
-    cf_handle = f.readline().strip()
+solve_folder = user_config["git_repo_name"]
+cf_handle = user_config["cf_username"]
 
 directory = os.path.join(os.getcwd(), f'{solve_folder}/')
 if not os.path.exists(directory):

@@ -135,21 +135,19 @@ class GitPushThread(threading.Thread):
 			l, r = 1, 8
 			data = requests.get(f"https://codeforces.com/api/user.status?handle={self.cf_handle}&from={l}&count={r}").json()
 
-			curr_time = time.time()
+			curr_time = int(time.time())
 			file_name = os.path.basename(self.file_path)
 
 			for s in data['result']:
 				probId = f"{s['problem']['contestId']}{s['problem']['index']}"
 				verdict = s['verdict']
 				partType = s['author']['participantType']
-				subTime = s["creationTimeSeconds"]
+				contestStart = curr_time - s["relativeTimeSeconds"]
 
-				if probId == self.prob_id and verdict == 'OK':
-					# 8760 hrs in a year
-					if partType == 'CONTESTANT' and curr_time - subTime < 3 * 60 * 60:
-						with open("contest_queue.txt", "a") as cq:
-							cq.write(f"{file_name} {subTime}\n")
-						return True
+				if probId == self.prob_id and verdict == 'OK' and partType == 'CONTESTANT':
+					with open("contest_queue.txt", "a") as cq:
+						cq.write(f"{file_name} {contestStart}\n")
+					return True
 			return False
 		except Exception as e:
 			self.output_callback(f"Error checking contest time: {e}\n")
@@ -208,11 +206,11 @@ class GitPushQueueThread(threading.Thread):
 
 			queue = set()
 			rem_queue = set()
-			curr_time = time.time()
+			curr_time = int(time.time())
 
 			for x in file:
-				fname, subtime = x.split(' ')
-				if curr_time - int(subtime) > 3 * 60 * 60:
+				fname, contestStart = x.split(' ')
+				if curr_time - contestStart > 5 * 60 * 60:
 					queue.add(fname)
 				else:
 					rem_queue.add(f"{x}\n")
