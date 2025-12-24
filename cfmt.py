@@ -147,7 +147,7 @@ def is_git_logged_in():
 
 def load_queue():
     if not os.path.isfile(CONTEST_QUEUE_FILE):
-        return []
+        return {}
     with open(CONTEST_QUEUE_FILE, 'r', encoding="utf-8") as f:
         return json.load(f)
 
@@ -158,17 +158,15 @@ def save_queue(queue):
 
 
 def contest_time_solve(handle, pId, f):
-    l, r = 1, 10
-
-    data = requests.get(
+    submission_list = requests.get(
         f"https://codeforces.com/api/user.status?"
-        f"handle={handle}&from={l}&count={r}"
+        f"handle={handle}&from={1}&count={15}"
     ).json()
+    contest_list = requests.get("https://codeforces.com/api/contest.list?gym=false").json()
 
-    curr_time = time.time()
     queue = load_queue()
 
-    for s in data['result']:
+    for s in submission_list['result']:
         problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
         if (
             problemId != pId
@@ -177,29 +175,13 @@ def contest_time_solve(handle, pId, f):
         ):
             continue
 
-        contest_id = f"{s['problem']['contestId']}"
-        contest_start = curr_time - s["relativeTimeSeconds"]
-
-        contest = None
-        for c in queue:
-            if c['contestId'] == contest_id and c['pending']:
-                contest = c
-                break
-
-        if contest is None:
-            contest_length = int(input("Enter Contest length (in Hours, eg.: 2): "))
-            contest = {
-                'pending': True,
-                'contestId': contest_id,
-                'contestStart': contest_start,
-                'contestLength': contest_length,
-                'solved': {}
-            }
-            queue.append(contest)
-
-        if problemId not in contest['solved']:
-            contest['solved'][problemId] = f
-            save_queue(queue)
+        contestId = f"{s['problem']['contestId']}"
+        for c in contest_list['result']:
+            if c['id'] == contestId:
+                contest_end = c['startTimeSeconds'] + c['durationSeconds']
+                if problemId not in queue:
+                    queue[problemId] = contest_end
+                    save_queue(queue)
         return True
     return False
 
@@ -223,38 +205,33 @@ def git_push(f, cf_handle, pId):
 
 def git_push_queue():
     curr_time = int(time.time())
-    updated = False
     queue = load_queue()
     if not queue:
         return
 
-    for contest in queue:
-        if not contest['pending']:
-            continue
+    ready = []
+    pending = {}
+    for fname, contest_end in queue.items():
+        if curr_time >= contest_end:
+            ready.append(fname)
+        else:
+            pending[fname] = contest_end
 
-        contest_start = queue['contestStart']
-        contest_length = queue['contestLength'] * 60 * 60
-        contest_end = contest_start + contest_length
+    if not ready:
+        return
 
-        if curr_time < contest_end:
-            return
+    print(f"Adding {', '.join(ready)} from contest queue to Git")
 
-        solved_files = list(contest['solved'].values())
+    os.chdir("cf_solves")
+    os.system(f"git add {' '.join(ready)}")
+    os.system(f'git commit -m "solved contest problems '
+              f'{", ".join(prob.split(".")[0] for prob in ready)}"')
+    os.system("git pull --rebase --autostash")
+    os.system("git push origin main")
+    os.chdir("..")
+    print(f"{', '.join(prob.split('.')[0] for prob in ready)} pushed to Github")
 
-        print(f"Adding {' '.join(solved_files)} from contest queue to Git")
-        os.chdir("cf_solves")
-        os.system(f"git add {' '.join(solved_files)}")
-        os.system(f'git commit -m "solved contest problems {" ".join(solved_files)}"')
-        os.system("git pull --rebase --autostash")
-        os.system("git push origin main")
-        os.chdir("..")
-
-        queue['pending'] = False
-        updated = True
-        print(f"{' '.join(queue)} pushed to Github")
-
-    if updated:
-        save_queue(queue)
+    save_queue(pending)
 
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
