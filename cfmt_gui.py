@@ -183,6 +183,7 @@ class GitPushThread(threading.Thread):
 				if (
 						problemId != self.prob_id
 						or s['verdict'] != 'OK'
+						or s['verdict'] != 'PARTIAL'
 						or s['author']['participantType'] != "CONTESTANT"
 				):
 					continue
