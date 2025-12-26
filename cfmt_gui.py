@@ -173,28 +173,24 @@ class GitPushThread(threading.Thread):
 			).json()
 			contest_list = requests.get(
 				"https://codeforces.com/api/contest.list?gym=false"
-			).json
+			).json()
 
 			queue = load_queue()
 			file_name = os.path.basename(self.file_path)
 
 			for s in submission_list['result']:
-				problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
-				if (
-					problemId != self.prob_id
-					or s['verdict'] != 'OK'
-					or s['author']['participantType'] != "CONTESTANT"
-				):
-					continue
-
 				contestId = f"{s['problem']['contestId']}"
-				for c in contest_list['result']:
-					if c['id'] == contestId:
-						contest_end = c['startTimeSeconds'] + c['durationSeconds']
-						if file_name not in queue:
-							queue[file_name] = contest_end
-							save_queue(queue)
-					return True
+				problemId = f"{contestId}{s['problem']['index']}"
+				if problemId == self.prob_id and (s['verdict'] == 'OK' or s['verdict'] == 'PARTIAL') and s['author']['participantType'] == "CONTESTANT":
+					for c in contest_list['result']:
+						if f"{c['id']}" == contestId:
+							contest_end = c['startTimeSeconds'] + c['durationSeconds']
+							if file_name not in queue:
+								queue[file_name] = contest_end
+								save_queue(queue)
+							return True
+				else:
+					continue
 			return False
 		except Exception as e:
 			self.output_callback(f"Error checking contest time: {e}\n")

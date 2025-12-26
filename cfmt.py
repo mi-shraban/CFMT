@@ -157,27 +157,24 @@ def contest_time_solve(handle, pId, f):
         f"https://codeforces.com/api/user.status?"
         f"handle={handle}&from={1}&count={15}"
     ).json()
-    contest_list = requests.get("https://codeforces.com/api/contest.list?gym=false").json()
+
+    contest_list = requests.get(
+        "https://codeforces.com/api/contest.list?gym=false"
+    ).json()
 
     queue = load_queue()
 
     for s in submission_list['result']:
-        problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
-        if (
-            problemId != pId
-            or s['verdict'] != 'OK'
-            or s['author']['participantType'] != "CONTESTANT"
-        ):
-            continue
-
         contestId = f"{s['problem']['contestId']}"
-        for c in contest_list['result']:
-            if c['id'] == contestId:
-                contest_end = c['startTimeSeconds'] + c['durationSeconds']
-                if f not in queue:
-                    queue[f] = contest_end
-                    save_queue(queue)
-        return True
+        problemId = f"{contestId}{s['problem']['index']}"
+        if problemId == pId and (s['verdict'] == 'OK' or s['verdict'] == 'PARTIAL') and s['author']['participantType'] == "CONTESTANT":
+            for c in contest_list['result']:
+                if f"{c['id']}" == contestId:
+                    contest_end = c['startTimeSeconds'] + c['durationSeconds']
+                    if f not in queue:
+                        queue[f] = contest_end
+                        save_queue(queue)
+                    return True
     return False
 
 
