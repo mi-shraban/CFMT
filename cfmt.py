@@ -166,7 +166,6 @@ def contest_time_solve(handle, pId, f):
         if (
             problemId != pId
             or s['verdict'] != 'OK'
-            or s['verdict'] != 'PARTIAL'
             or s['author']['participantType'] != "CONTESTANT"
         ):
             continue

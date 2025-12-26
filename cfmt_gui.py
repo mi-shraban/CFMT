@@ -181,10 +181,9 @@ class GitPushThread(threading.Thread):
 			for s in submission_list['result']:
 				problemId = f"{s['problem']['contestId']}{s['problem']['index']}"
 				if (
-						problemId != self.prob_id
-						or s['verdict'] != 'OK'
-						or s['verdict'] != 'PARTIAL'
-						or s['author']['participantType'] != "CONTESTANT"
+					problemId != self.prob_id
+					or s['verdict'] != 'OK'
+					or s['author']['participantType'] != "CONTESTANT"
 				):
 					continue
 
