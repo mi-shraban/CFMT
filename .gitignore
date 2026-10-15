@@ -1,6 +1,51 @@
+# Virtual Environments
+.cfmt/
+venv/
+.venv/
+env/
+ENV/
+
+# User runtime configuration & local queues
+user_config.json
+contest_queue.json
+theme_preference.txt
+user_info.txt
+
+# Local solution repository directories
 cf_solves/
-a.exe
+
+# Local binary icons & preview images (if not tracked)
 cfmt.png
 codeforces.ico
-user_info.txt
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# C/C++ compiled binaries & objects
+a.exe
+a.out
+*.o
+*.obj
+
+# PyInstaller / Build artifacts
+build/
+dist/
+*.spec
+
+# Archives & temporary files
 *.zip
+*.tar.gz
+*.log
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS artifacts
+Thumbs.db
+.DS_Store

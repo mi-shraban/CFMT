@@ -1,0 +1,55 @@
+name: Build CFMT Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --windowed `
+            --icon "codeforces.ico" `
+            --name "cfmt_gui" `
+            --add-data "codeforces.ico;." `
+            --add-data "cpp_template.txt;." `
+            --add-data "py_template.txt;." `
+            cfmt_gui.py
+
+      - name: Create Zip Archive
+        run: |
+          Compress-Archive -Path dist\cfmt_gui\* -DestinationPath cfmt_gui_windows.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfmt-gui-windows
+          path: cfmt_gui_windows.zip
+
+      - name: Release Asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cfmt_gui_windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

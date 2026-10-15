@@ -119,8 +119,15 @@ def open_code_file_with_template(l, p):
 
 def compile_code(l, p):
     if l == 'cpp':
-        os.system(f'g++ -std=c++14 {p}')
-        print('Compiled Successfully')
+        exe_name = "a.exe" if os.name == "nt" else "a.out"
+        res = subprocess.run(["g++", "-std=c++17", "-O2", p, "-o", exe_name], capture_output=True, text=True)
+        if res.returncode == 0:
+            print('Compiled Successfully')
+            if res.stderr.strip():
+                print(f"[Compiler Warnings]:\n{res.stderr.strip()}")
+        else:
+            print('Compilation Failed:')
+            print(res.stderr.strip())
     elif l == 'py':
         print('Compilation not needed.')
 
@@ -128,10 +135,11 @@ def compile_code(l, p):
 def run_code(l, p):
     print('input here:')
     if l == 'cpp':
-        os.system('a')
+        exe_name = "a.exe" if os.name == "nt" else "./a.out"
+        subprocess.run([exe_name])
         print()
     elif l == 'py':
-        os.system(f"python {p}")
+        subprocess.run([sys.executable, p])
 
 
 def is_git_logged_in():
@@ -153,44 +161,51 @@ def save_queue(queue):
 
 
 def contest_time_solve(handle, pId, f):
-    submission_list = requests.get(
-        f"https://codeforces.com/api/user.status?"
-        f"handle={handle}&from={1}&count={15}"
-    ).json()
+    try:
+        submission_list = requests.get(
+            f"https://codeforces.com/api/user.status?"
+            f"handle={handle}&from={1}&count={15}",
+            timeout=10
+        ).json()
 
-    contest_list = requests.get(
-        "https://codeforces.com/api/contest.list?gym=false"
-    ).json()
+        contest_list = requests.get(
+            "https://codeforces.com/api/contest.list?gym=false",
+            timeout=10
+        ).json()
 
-    queue = load_queue()
+        queue = load_queue()
 
-    for s in submission_list['result']:
-        contestId = f"{s['problem']['contestId']}"
-        problemId = f"{contestId}{s['problem']['index']}"
-        if problemId == pId and (s['verdict'] == 'OK' or s['verdict'] == 'PARTIAL') and s['author']['participantType'] == "CONTESTANT":
-            for c in contest_list['result']:
-                if f"{c['id']}" == contestId:
-                    contest_end = c['startTimeSeconds'] + c['durationSeconds']
-                    if f not in queue:
-                        queue[f] = contest_end
-                        save_queue(queue)
-                    return True
-    return False
+        if submission_list.get('status') != 'OK' or contest_list.get('status') != 'OK':
+            return False
+
+        for s in submission_list.get('result', []):
+            contestId = f"{s.get('problem', {}).get('contestId', '')}"
+            problemId = f"{contestId}{s.get('problem', {}).get('index', '')}"
+            if problemId == pId and (s.get('verdict') in ('OK', 'PARTIAL')) and s.get('author', {}).get('participantType') == "CONTESTANT":
+                for c in contest_list.get('result', []):
+                    if f"{c.get('id')}" == contestId:
+                        contest_end = c.get('startTimeSeconds', 0) + c.get('durationSeconds', 0)
+                        if f not in queue:
+                            queue[f] = contest_end
+                            save_queue(queue)
+                        return True
+        return False
+    except Exception as e:
+        print(f"Error checking contest status: {e}")
+        return False
 
 
 def git_push(f, cf_handle, pId):
     if not contest_time_solve(cf_handle, pId, f):
-        print(f"Adding {f} to Git")
-        os.chdir("cf_solves")
-        os.system(f"git add {f}")
-        os.system(f'git commit -m "solved {pId}"')
+        print(f"Adding {f} to Git...")
+        subprocess.run(["git", "add", f], cwd=solve_folder)
+        subprocess.run(["git", "commit", "-m", f"solved {pId}"], cwd=solve_folder)
 
         print("Pulling latest changes...")
-        os.system("git pull --rebase --autostash")
+        subprocess.run(["git", "pull", "--rebase", "--autostash"], cwd=solve_folder)
 
         print("Pushing to GitHub...")
-        os.system(f"git push origin main")
-        os.chdir("..")
+        subprocess.run(["git", "push", "origin", "main"], cwd=solve_folder)
     else:
         print(f"Added {f} to Contest Queue.\n"
               f"Queued solutions will be auto pushed to Github on Restart after contest is finished.\n")
@@ -213,16 +228,15 @@ def git_push_queue():
     if not ready:
         return
 
-    print(f"Adding {', '.join(ready)} from contest queue to Git")
+    prob_names = [prob.split('.')[0] for prob in ready]
+    print(f"Adding {', '.join(prob_names)} from contest queue to Git...")
 
-    os.chdir(f"{solve_folder}")
-    os.system(f"git add {' '.join(ready)}")
-    os.system(f'git commit -m "solved contest problems '
-              f'{", ".join(prob.split(".")[0] for prob in ready)}"')
-    os.system("git pull --rebase --autostash")
-    os.system("git push origin main")
-    os.chdir("..")
-    print(f"{', '.join(prob.split('.')[0] for prob in ready)} pushed to Github")
+    subprocess.run(["git", "add"] + ready, cwd=solve_folder)
+    commit_msg = f"solved contest problems {', '.join(prob_names)}"
+    subprocess.run(["git", "commit", "-m", commit_msg], cwd=solve_folder)
+    subprocess.run(["git", "pull", "--rebase", "--autostash"], cwd=solve_folder)
+    subprocess.run(["git", "push", "origin", "main"], cwd=solve_folder)
+    print(f"{', '.join(prob_names)} pushed to Github.")
 
     save_queue(pending)
 

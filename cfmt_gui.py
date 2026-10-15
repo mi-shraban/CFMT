@@ -40,29 +40,41 @@ def save_queue(cfg):
 
 
 class UserInfoDialog(tk.Toplevel):
-	def __init__(self, parent):
+	def __init__(self, parent, current_username="", current_repo="", current_cf_handle="", is_settings=False):
 		super().__init__(parent)
-		self.title("CF Repo Setup")
-		self.geometry("450x300")
+		self.is_settings = is_settings
+		self.title("CFMT Settings" if is_settings else "CF Repo Setup")
+		self.geometry("450x330")
 		self.resizable(False, False)
 		try:
 			self.iconbitmap("codeforces.ico")
-		except Exception as e:
+		except Exception:
 			pass
 
-		ttk.Label(self, text="GitHub Username:", font=("Segoe UI", 11)).pack(pady=10)
+		ttk.Label(self, text="GitHub Username:", font=("Segoe UI", 11)).pack(pady=(10, 2))
 		self.username_entry = ttk.Entry(self, width=40)
 		self.username_entry.pack()
+		if current_username:
+			self.username_entry.insert(0, current_username)
 
-		ttk.Label(self, text="CF Repository Name:", font=("Segoe UI", 11)).pack(pady=10)
+		ttk.Label(self, text="CF Repository Name:", font=("Segoe UI", 11)).pack(pady=(10, 2))
 		self.repo_entry = ttk.Entry(self, width=40)
 		self.repo_entry.pack()
+		if current_repo:
+			self.repo_entry.insert(0, current_repo)
 
-		ttk.Label(self, text="CF Username:", font=("Segoe UI", 11)).pack(pady=10)
+		ttk.Label(self, text="CF Username / Handle:", font=("Segoe UI", 11)).pack(pady=(10, 2))
 		self.cf_handle_entry = ttk.Entry(self, width=40)
 		self.cf_handle_entry.pack()
+		if current_cf_handle:
+			self.cf_handle_entry.insert(0, current_cf_handle)
 
-		ttk.Button(self, text="OK", command=self.submit).pack(pady=15)
+		btn_frame = ttk.Frame(self)
+		btn_frame.pack(pady=15)
+
+		ttk.Button(btn_frame, text="Save" if is_settings else "OK", command=self.submit, bootstyle="primary").pack(side=tk.LEFT, padx=5)
+		if is_settings:
+			ttk.Button(btn_frame, text="Cancel", command=self.destroy, bootstyle="secondary").pack(side=tk.LEFT, padx=5)
 
 		self.username = None
 		self.repo = None
@@ -72,11 +84,11 @@ class UserInfoDialog(tk.Toplevel):
 	@staticmethod
 	def validate_username(username):
 		if not username:
-			return False, "Github username mustn't be empty."
+			return False, "GitHub username mustn't be empty."
 		if len(username) > 39:
-			return False, "Provided string too long, cannot be Github username."
-		if not re.match(r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$", username):
-			return False, "This doesn't look like a valid Github username."
+			return False, "Provided string too long, cannot be GitHub username."
+		if not re.match(r"^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$", username, re.IGNORECASE):
+			return False, "This doesn't look like a valid GitHub username."
 		return True, ""
 
 	@staticmethod
@@ -84,7 +96,7 @@ class UserInfoDialog(tk.Toplevel):
 		if not reponame:
 			return False, "Repository name mustn't be empty."
 		if reponame.endswith(".git"):
-			reponame = reponame.rstrip(".git")
+			reponame = reponame[:-4]
 		if len(reponame) > 100:
 			return False, "Provided string too long, cannot be Repository name."
 		if not re.match(r"^[A-Za-z0-9._-]{1,100}$", reponame):
@@ -94,13 +106,18 @@ class UserInfoDialog(tk.Toplevel):
 	@staticmethod
 	def validate_cf_handle(cf_handle):
 		if not cf_handle:
-			return False, "Coderforces handle mustn't be empty."
-		data = requests.get(
-			f"https://codeforces.com/api/user.info?handles={cf_handle}&checkHistoricHandles=False").json()
-		if data["status"] == 'OK':
-			return True, ""
-		else:
-			return False, "Codeforces username wasn't found. Recheck spelling"
+			return False, "Codeforces handle mustn't be empty."
+		try:
+			data = requests.get(
+				f"https://codeforces.com/api/user.info?handles={cf_handle}&checkHistoricHandles=False",
+				timeout=10
+			).json()
+			if data.get("status") == 'OK':
+				return True, ""
+			else:
+				return False, "Codeforces username wasn't found. Recheck spelling."
+		except Exception as e:
+			return False, f"Could not connect to Codeforces API: {e}"
 
 	def submit(self):
 		username = self.username_entry.get().strip()
@@ -123,32 +140,39 @@ class UserInfoDialog(tk.Toplevel):
 			return
 
 		if os.path.exists(reponame) and os.path.isdir(reponame):
-			use_existing = messagebox.askyesno(
-				"Repository Already Cloned",
-				f"{reponame} already exists and is not an empty directory.\n"
-				f"Yes: Use existing repo.\n"
-				f"No: Enter a different repo\n"
+			if not self.is_settings:
+				use_existing = messagebox.askyesno(
+					"Repository Already Cloned",
+					f"{reponame} already exists locally.\n"
+					f"Yes: Use existing repository folder.\n"
+					f"No: Choose a different repository name.\n"
+				)
+				if not use_existing:
+					return
+			self.username = username
+			self.repo = reponame
+			self.cf_handle = cf_handle
+			self.destroy()
+			return
+
+		clone_cmd = ["git", "clone", f"https://github.com/{username}/{reponame}.git"]
+		clone_res = subprocess.run(clone_cmd, capture_output=True, text=True)
+		if clone_res.returncode != 0:
+			retry = messagebox.askretrycancel(
+				"Repository Clone Failed",
+				f"Failed to clone github.com/{username}/{reponame}\n"
+				f"-- Check if the Repository exists on GitHub.\n"
+				f"-- Recheck the spelling of username and repo.\n"
+				f"-- Check your internet connection.\n\n"
+				f"Details:\n{clone_res.stderr.strip()}"
 			)
-			if use_existing:
-				self.username = username
-				self.repo = reponame
-				self.cf_handle = cf_handle
-				self.destroy()
+			if retry:
 				return
+			elif not self.is_settings:
+				sys.exit(1)
 			else:
 				return
 
-		clone_res = os.system(f"git clone https://github.com/{username}/{reponame}.git")
-		if clone_res:
-			retry = messagebox.askretrycancel("Repository Not Found\n",
-											  f"Failed to clone github.com/{username}{reponame}\n"
-											  f"-- Check if the Repository exists.\n"
-											  f"-- Recheck the spellings\n"
-											  f"-- Check internet connection\n")
-			if retry:
-				return
-			else:
-				sys.exit(1)
 		self.username = username
 		self.repo = reponame
 		self.cf_handle = cf_handle
@@ -168,64 +192,72 @@ class GitPushThread(threading.Thread):
 	def contest_time_solve(self):
 		try:
 			submission_list = requests.get(
-				f"https://codeforces.com/api/user.status?"
-				f"handle={self.cf_handle}&from={1}&count={15}"
+				f"https://codeforces.com/api/user.status?handle={self.cf_handle}&from=1&count=15",
+				timeout=10
 			).json()
 			contest_list = requests.get(
-				"https://codeforces.com/api/contest.list?gym=false"
+				"https://codeforces.com/api/contest.list?gym=false",
+				timeout=10
 			).json()
 
 			queue = load_queue()
 			file_name = os.path.basename(self.file_path)
 
-			for s in submission_list['result']:
-				contestId = f"{s['problem']['contestId']}"
-				problemId = f"{contestId}{s['problem']['index']}"
-				if problemId == self.prob_id and (s['verdict'] == 'OK' or s['verdict'] == 'PARTIAL') and s['author'][
-					'participantType'] == "CONTESTANT":
-					for c in contest_list['result']:
-						if f"{c['id']}" == contestId:
-							contest_end = c['startTimeSeconds'] + c['durationSeconds']
+			if submission_list.get("status") != "OK" or contest_list.get("status") != "OK":
+				return False
+
+			for s in submission_list.get('result', []):
+				contestId = f"{s.get('problem', {}).get('contestId', '')}"
+				problemId = f"{contestId}{s.get('problem', {}).get('index', '')}"
+				if problemId == self.prob_id and (s.get('verdict') in ('OK', 'PARTIAL')) and s.get('author', {}).get('participantType') == "CONTESTANT":
+					for c in contest_list.get('result', []):
+						if f"{c.get('id')}" == contestId:
+							contest_end = c.get('startTimeSeconds', 0) + c.get('durationSeconds', 0)
 							if file_name not in queue:
 								queue[file_name] = contest_end
 								save_queue(queue)
 							return True
-				else:
-					continue
 			return False
 		except Exception as e:
-			self.output_callback(f"Error checking contest time: {e}\n")
+			self.output_callback(f"Error checking contest status: {e}\n")
 			return False
 
 	def run(self):
 		try:
 			if self.contest_time_solve():
 				self.output_callback(
-					f"Added {os.path.basename(self.file_path)} to Contest Queue, due to it being a Contest Solution.\n"
-					f"Queued solutions will be auto pushed to Github on Restart after contest is finished."
+					f"Added {os.path.basename(self.file_path)} to Contest Queue (Active Contest Solution).\n"
+					f"Queued solutions will automatically be pushed to GitHub after the contest concludes.\n"
 				)
 				self.finished_callback(close_tab=True)
 				return
 
-			os.chdir(self.solve_folder)
+			base_file = os.path.basename(self.file_path)
 
-			self.output_callback(f"Adding {os.path.basename(self.file_path)}...\n")
-			os.system(f"git add {os.path.basename(self.file_path)}")
+			self.output_callback(f"Adding {base_file} to Git...\n")
+			add_res = subprocess.run(["git", "add", base_file], cwd=self.solve_folder, capture_output=True, text=True)
+			if add_res.returncode != 0:
+				self.output_callback(f"Git add warning: {add_res.stderr}\n")
 
-			self.output_callback(f"Committing solved {self.prob_id}...\n")
-			os.system(f'git commit -m "solved {self.prob_id}"')
+			self.output_callback(f"Committing 'solved {self.prob_id}'...\n")
+			commit_res = subprocess.run(["git", "commit", "-m", f"solved {self.prob_id}"], cwd=self.solve_folder, capture_output=True, text=True)
+			if commit_res.returncode != 0 and "nothing to commit" not in commit_res.stdout:
+				self.output_callback(f"Commit note: {commit_res.stdout or commit_res.stderr}\n")
 
-			self.output_callback("Pulling latest changes...\n")
-			os.system("git pull --rebase --autostash")
+			self.output_callback("Pulling latest changes with rebase...\n")
+			pull_res = subprocess.run(["git", "pull", "--rebase", "--autostash"], cwd=self.solve_folder, capture_output=True, text=True)
+			if pull_res.returncode != 0:
+				self.output_callback(f"Pull warning: {pull_res.stderr or pull_res.stdout}\n")
 
-			self.output_callback("Pushing to GitHub...\n")
-			os.system("git push origin main")
+			self.output_callback("Pushing to GitHub origin main...\n")
+			push_res = subprocess.run(["git", "push", "origin", "main"], cwd=self.solve_folder, capture_output=True, text=True)
+			if push_res.returncode != 0:
+				self.output_callback(f"Git push notice: {push_res.stderr or push_res.stdout}\n")
 
-			os.chdir("..")
-			self.output_callback("Completed.\n\n\n")
+			self.output_callback("Push completed successfully.\n\n")
 			self.finished_callback(close_tab=True)
 		except Exception as e:
-			self.output_callback(f"Error: {str(e)}\n")
+			self.output_callback(f"Error during Git push: {str(e)}\n\n")
 			self.finished_callback(close_tab=False)
 
 
@@ -254,30 +286,26 @@ class GitPushQueueThread(threading.Thread):
 			if not ready:
 				return
 
-			self.output_callback(f"--- Pushing from Contest Queue ---\n")
-			os.chdir(self.solve_folder)
+			self.output_callback(f"--- Processing Contest Queue ({len(ready)} ready) ---\n")
+			prob_names = [p.split('.')[0] for p in ready]
+			self.output_callback(f"Adding {', '.join(prob_names)} from queue to Git\n")
 
-			self.output_callback(f"Adding {', '.join(prob.split('.')[0] for prob in ready)} "
-								 f"from contest queue to Git\n")
-			os.system(f"git add {' '.join(ready)}")
+			subprocess.run(["git", "add"] + ready, cwd=self.solve_folder, capture_output=True, text=True)
 
-			self.output_callback(f"Committing 'solved contest problems "
-								 f"{', '.join(prob.split('.')[0] for prob in ready)}'\n")
-			os.system(f'git commit -m "solved contest problems '
-					  f'{", ".join(prob.split(".")[0] for prob in ready)}"')
+			commit_msg = f"solved contest problems {', '.join(prob_names)}"
+			self.output_callback(f"Committing '{commit_msg}'\n")
+			subprocess.run(["git", "commit", "-m", commit_msg], cwd=self.solve_folder, capture_output=True, text=True)
 
 			self.output_callback("Pulling latest changes...\n")
-			os.system("git pull --rebase --autostash")
+			subprocess.run(["git", "pull", "--rebase", "--autostash"], cwd=self.solve_folder, capture_output=True, text=True)
 
 			self.output_callback("Pushing to GitHub...\n")
-			os.system("git push origin main")
+			subprocess.run(["git", "push", "origin", "main"], cwd=self.solve_folder, capture_output=True, text=True)
 
-			os.chdir("..")
-			self.output_callback(f"{', '.join(prob.split('.')[0] for prob in ready)} "
-								 f"pushed to Github\n")
+			self.output_callback(f"{', '.join(prob_names)} pushed to GitHub.\n")
 			save_queue(pending)
 			if pending:
-				self.output_callback(f"--- Contest Queue Updated ---\n\n")
+				self.output_callback(f"--- Contest Queue: {len(pending)} solution(s) still waiting for contest end ---\n\n")
 			else:
 				self.output_callback(f"--- Contest Queue Cleared ---\n\n")
 		except Exception as e:
@@ -291,7 +319,7 @@ class FileTab:
 		self.prob_id = prob_id
 		self.lang = lang
 		self.file_name = os.path.basename(file_path)
-		self.input_content = "Paste test input here BEFORE RUNNING THE CODE..."  # Store input for this tab
+		self.input_content = "Paste test input here BEFORE RUNNING THE CODE..."
 
 
 class CFMT_GUI:
@@ -315,12 +343,17 @@ class CFMT_GUI:
 
 	def init_ui(self):
 		self.root.title("CFMT - Codeforces Management Tool")
-		self.root.geometry("1440x720")
+		self.root.geometry("1440x750")
 
 		try:
 			self.root.iconbitmap("codeforces.ico")
-		except Exception as e:
+		except Exception:
 			pass
+
+		# Keyboard Shortcuts
+		self.root.bind("<Control-Return>", lambda e: self.run_code())
+		self.root.bind("<F5>", lambda e: self.run_code())
+		self.root.bind("<F7>", lambda e: self.compile_code())
 
 		main_frame = ttk.Frame(self.root, padding="20")
 		main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -331,17 +364,25 @@ class CFMT_GUI:
 
 		# Header
 		header_frame = ttk.Frame(main_frame)
-		header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 20))
+		header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
 		header_frame.columnconfigure(0, weight=1)
 
 		header = ttk.Label(header_frame, text="Codeforces Management Tool",
-						   font=("Segoe UI", 24, "bold"))
+						   font=("Segoe UI", 22, "bold"))
 		header.grid(row=0, column=0, sticky=tk.W)
 
-		self.theme_btn = ttk.Menubutton(header_frame,
-										text=f"{self.root.style.theme.name.capitalize()}",
+		btn_header_group = ttk.Frame(header_frame)
+		btn_header_group.grid(row=0, column=1, sticky=tk.E)
+
+		self.settings_btn = ttk.Button(btn_header_group, text="⚙ Settings",
+									   command=self.open_settings,
+									   bootstyle="secondary-outline")
+		self.settings_btn.pack(side=tk.LEFT, padx=5)
+
+		self.theme_btn = ttk.Menubutton(btn_header_group,
+										text=f"Theme: {self.root.style.theme.name.capitalize()}",
 										bootstyle="primary-outline")
-		self.theme_btn.grid(row=0, column=1, sticky=tk.E, padx=(10, 5))
+		self.theme_btn.pack(side=tk.LEFT, padx=5)
 
 		theme_menu = tk.Menu(self.theme_btn, tearoff=0)
 		self.theme_btn["menu"] = theme_menu
@@ -354,7 +395,7 @@ class CFMT_GUI:
 
 		# Problem Input
 		prob_frame = ttk.Frame(main_frame)
-		prob_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=10)
+		prob_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=8)
 		prob_frame.columnconfigure(1, weight=1)
 
 		ttk.Label(prob_frame, text="Problem ID:",
@@ -368,16 +409,16 @@ class CFMT_GUI:
 
 		# Language selection
 		lang_frame = ttk.Frame(main_frame)
-		lang_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=10)
+		lang_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=8)
 
 		ttk.Label(lang_frame, text="Language:",
 				  font=("Segoe UI", 11, "bold")).grid(row=0, column=0, padx=(0, 10))
 
-		self.current_lang = tk.StringVar(value='py')
+		self.current_lang = tk.StringVar(value='cpp')
+		ttk.Radiobutton(lang_frame, text="C++ (g++ C++17 -O2)",
+						variable=self.current_lang, value="cpp").grid(row=0, column=1, padx=8)
 		ttk.Radiobutton(lang_frame, text="Python",
-						variable=self.current_lang, value="py").grid(row=0, column=1, padx=5)
-		ttk.Radiobutton(lang_frame, text="C++",
-						variable=self.current_lang, value="cpp").grid(row=0, column=2, padx=5)
+						variable=self.current_lang, value="py").grid(row=0, column=2, padx=8)
 
 		# Create file button
 		self.create_btn = ttk.Button(main_frame, text="Create Code File",
@@ -389,11 +430,11 @@ class CFMT_GUI:
 		actions_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), pady=10)
 		actions_frame.columnconfigure([0, 1, 2], weight=1)
 
-		self.compile_btn = ttk.Button(actions_frame, text="Compile (C++)",
+		self.compile_btn = ttk.Button(actions_frame, text="Compile (C++) [F7]",
 									  command=self.compile_code, state="disabled")
 		self.compile_btn.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5)
 
-		self.run_btn = ttk.Button(actions_frame, text="Run Code",
+		self.run_btn = ttk.Button(actions_frame, text="Run Code [F5]",
 								  command=self.run_code, state="disabled")
 		self.run_btn.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
 
@@ -428,7 +469,7 @@ class CFMT_GUI:
 		right_frame.columnconfigure(0, weight=1)
 		bottom_frame.rowconfigure(0, weight=1)
 
-		ttk.Label(right_frame, text="Input Box:",
+		ttk.Label(right_frame, text="Input Box (Paste test case input here):",
 				  font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
 
 		self.input_box = ScrolledText(right_frame, wrap=tk.WORD,
@@ -437,7 +478,7 @@ class CFMT_GUI:
 		self.input_box.bind("<FocusIn>", self.clear_input_placeholder)
 		self.input_box.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-		# Tab bar at the bottom spanning full width
+		# Tab bar at the bottom
 		tab_bar_frame = ttk.Frame(main_frame)
 		tab_bar_frame.grid(row=7, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
 		tab_bar_frame.columnconfigure(0, weight=1)
@@ -448,17 +489,37 @@ class CFMT_GUI:
 			font=("Segoe UI", 11, "bold")
 		).grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
 
-		# Horizontal tab container with border
-		tabs_border_frame = ttk.Labelframe(tab_bar_frame, padding=10, relief="solid", borderwidth=1)
+		tabs_border_frame = ttk.Labelframe(tab_bar_frame, padding=8, relief="solid", borderwidth=1)
 		tabs_border_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
 
 		self.tabs_container = ttk.Frame(tabs_border_frame)
 		self.tabs_container.pack(fill=tk.X)
 
-	def update_tab_display(self):
-		"""Refresh the tab buttons display as a horizontal bar"""
+	def open_settings(self):
+		cfg = load_user_config() or {}
+		dialog = UserInfoDialog(
+			self.root,
+			current_username=cfg.get("github_username", ""),
+			current_repo=cfg.get("git_repo_name", self.solve_folder),
+			current_cf_handle=cfg.get("cf_username", self.cf_handle),
+			is_settings=True
+		)
+		self.root.wait_window(dialog)
 
-		# Destroy all previous tab widgets
+		if dialog.username and dialog.repo and dialog.cf_handle:
+			new_cfg = {
+				"github_username": dialog.username,
+				"git_repo_name": dialog.repo,
+				"cf_username": dialog.cf_handle
+			}
+			save_user_config(new_cfg)
+			self.solve_folder = dialog.repo
+			self.cf_handle = dialog.cf_handle
+			os.makedirs(self.solve_folder, exist_ok=True)
+			self.append_log(f"--- Settings Updated ---\n"
+							f"GitHub: {dialog.username} | Repo: {dialog.repo} | CF: {dialog.cf_handle}\n\n")
+
+	def update_tab_display(self):
 		for widget in self.tabs_container.winfo_children():
 			widget.destroy()
 
@@ -468,20 +529,20 @@ class CFMT_GUI:
 			is_active = (idx == self.current_tab_index)
 
 			tab_frame = ttk.Frame(self.tabs_container)
-			tab_frame.pack(side=tk.LEFT, padx=2)
+			tab_frame.pack(side=tk.LEFT, padx=3)
 
 			btn = ttk.Button(
 				tab_frame,
 				text=f"{tab.prob_id}.{tab.lang}",
 				command=lambda i=idx: self.switch_tab(i),
 				bootstyle="primary" if is_active else "secondary-outline",
-				width=10
+				width=11
 			)
 			btn.pack(side=tk.LEFT)
 
 			close_btn = ttk.Button(
 				tab_frame,
-				text=f"\u2715",
+				text="\u2715",
 				command=lambda i=idx: self.close_tab(i),
 				bootstyle="danger-outline",
 				width=3
@@ -491,9 +552,7 @@ class CFMT_GUI:
 			self.tab_buttons.append(btn)
 
 	def switch_tab(self, index):
-		"""Switch to a different tab"""
 		if 0 <= index < len(self.file_tabs):
-			# Save current tab's input before switching
 			if self.current_tab_index is not None and 0 <= self.current_tab_index < len(self.file_tabs):
 				current_input = self.input_box.get("1.0", tk.END).strip()
 				self.file_tabs[self.current_tab_index].input_content = current_input
@@ -505,7 +564,6 @@ class CFMT_GUI:
 			self.prob_input.insert(0, tab.prob_id)
 			self.current_lang.set(tab.lang)
 
-			# Restore the input for this tab
 			self.input_box.delete("1.0", tk.END)
 			self.input_box.insert("1.0", tab.input_content)
 
@@ -518,7 +576,6 @@ class CFMT_GUI:
 				self.git_btn.config(state="normal")
 
 	def close_tab(self, index):
-		"""Close a specific tab"""
 		if 0 <= index < len(self.file_tabs):
 			tab = self.file_tabs[index]
 			self.append_log(f"--- Closed {tab.file_name} ---\n")
@@ -533,17 +590,14 @@ class CFMT_GUI:
 				self.run_btn.config(state="disabled")
 				self.git_btn.config(state="disabled")
 			elif self.current_tab_index == index:
-				# Switch to the previous tab (or first if closing the first tab)
 				new_index = max(0, index - 1)
 				self.current_tab_index = new_index
 
-				# Load the new tab's content
 				new_tab = self.file_tabs[new_index]
 				self.prob_input.delete(0, tk.END)
 				self.prob_input.insert(0, new_tab.prob_id)
 				self.current_lang.set(new_tab.lang)
 
-				# Restore the input for the new tab
 				self.input_box.delete("1.0", tk.END)
 				self.input_box.insert("1.0", new_tab.input_content)
 
@@ -557,7 +611,6 @@ class CFMT_GUI:
 			self.update_tab_display()
 
 	def get_current_tab(self):
-		"""Get the currently active tab, or None"""
 		if self.current_tab_index is not None and 0 <= self.current_tab_index < len(self.file_tabs):
 			return self.file_tabs[self.current_tab_index]
 		return None
@@ -567,11 +620,12 @@ class CFMT_GUI:
 
 		is_valid, error_msg = self.validate_problem_id(prob_id)
 		if not is_valid or prob_id == "e.g., 2160B":
-			messagebox.showwarning("Invalid Input", error_msg or "Enter a valid Problem ID!")
+			messagebox.showwarning("Invalid Input", error_msg or "Enter a valid Problem ID (e.g., 2160B)!")
 			return
 
 		ext = self.current_lang.get()
 		file_name = f"{prob_id}.{ext}"
+		os.makedirs(self.solve_folder, exist_ok=True)
 		file_path = os.path.join(self.solve_folder, file_name)
 
 		for idx, tab in enumerate(self.file_tabs):
@@ -583,18 +637,20 @@ class CFMT_GUI:
 		if not os.path.exists(file_path):
 			template = f"{ext}_template.txt"
 			if os.path.exists(template):
-				with open(template, "r") as t, open(file_path, "w") as cf:
+				with open(template, "r", encoding="utf-8") as t, open(file_path, "w", encoding="utf-8") as cf:
 					cf.write(t.read())
 			else:
-				open(file_path, "w").close()
+				open(file_path, "w", encoding="utf-8").close()
 
-		if os.name == "nt":
-			subprocess.Popen(f'code "{file_path}"', shell=True,
-							 creationflags=subprocess.CREATE_NO_WINDOW)
-		else:
-			subprocess.Popen(f'code "{file_path}"', shell=True)
+		try:
+			if os.name == "nt":
+				subprocess.Popen(f'code "{file_path}"', shell=True,
+								 creationflags=subprocess.CREATE_NO_WINDOW)
+			else:
+				subprocess.Popen(f'code "{file_path}"', shell=True)
+		except Exception:
+			pass
 
-		# Save current tab's input before creating new tab
 		if self.current_tab_index is not None and 0 <= self.current_tab_index < len(self.file_tabs):
 			current_input = self.input_box.get("1.0", tk.END).strip()
 			self.file_tabs[self.current_tab_index].input_content = current_input
@@ -613,11 +669,9 @@ class CFMT_GUI:
 		self.run_btn.config(state="normal")
 
 		if not self.is_git_logged_in():
-			self.append_log(f"--- To access Git push operation: \n"
-							f"--- Download and Log into Github Desktop app from: "
-							f"'https://desktop.github.com/download/'\n"
-							f"--- Otherwise, your solutions will be stored in {self.solve_folder}, "
-							f"you can push the changes later on.\n")
+			self.append_log(f"--- To access Git push operations:\n"
+							f"--- Configure git global user.name and user.email, or use GitHub Desktop.\n"
+							f"--- Solutions are safely saved in '{self.solve_folder}/'.\n")
 			self.git_btn.config(state="disabled")
 		else:
 			self.git_btn.config(state="normal")
@@ -632,13 +686,23 @@ class CFMT_GUI:
 			self.append_log("Python does not need compilation.\n")
 			return
 
-		cmd = f'g++ -std=c++14 "{tab.file_path}" -o a.exe'
-		self.append_log(f"\nCompiling {tab.file_name}...\n")
-		result = os.system(cmd)
-		if result == 0:
-			self.append_log("\nCompiled successfully!\n")
-		else:
-			self.append_log("\nCompilation failed!\n")
+		exe_name = "a.exe" if os.name == "nt" else "a.out"
+		cmd = ["g++", "-std=c++17", "-O2", tab.file_path, "-o", exe_name]
+		self.append_log(f"\nCompiling {tab.file_name} (g++ -std=c++17 -O2)...\n")
+
+		try:
+			proc = subprocess.run(cmd, capture_output=True, text=True)
+			if proc.returncode == 0:
+				self.append_log("Compiled successfully!\n")
+				if proc.stderr.strip():
+					self.append_log(f"[Compiler Warnings]:\n{proc.stderr.strip()}\n")
+			else:
+				self.append_log("[Compilation Error]:\n")
+				self.append_log(proc.stderr.strip() + "\n")
+		except FileNotFoundError:
+			self.append_log("[Error] 'g++' compiler not found! Make sure MinGW/GCC is installed and added to PATH.\n")
+		except Exception as e:
+			self.append_log(f"[Compilation Error]: {str(e)}\n")
 
 	def run_code(self):
 		tab = self.get_current_tab()
@@ -652,25 +716,47 @@ class CFMT_GUI:
 		if user_input.strip() == "Paste test input here BEFORE RUNNING THE CODE...":
 			user_input = ""
 
+		exe_name = "a.exe" if os.name == "nt" else "./a.out"
+		if tab.lang == "cpp":
+			check_file = "a.exe" if os.name == "nt" else "a.out"
+			if not os.path.exists(check_file):
+				self.append_log("[Notice] Executable not found. Compiling first...\n")
+				self.compile_code()
+				if not os.path.exists(check_file):
+					return
+			cmd = [exe_name]
+		elif tab.lang == "py":
+			cmd = [sys.executable, tab.file_path]
+
 		try:
-			if tab.lang == "cpp":
-				cmd = ["a.exe"]
-			elif tab.lang == "py":
-				cmd = ["python", tab.file_path]
+			start_time = time.time()
+			process = subprocess.Popen(
+				cmd,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE,
+				text=True
+			)
 
-			process = subprocess.Popen(cmd, stdin=subprocess.PIPE,
-									   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-									   text=True)
+			try:
+				stdout, stderr = process.communicate(user_input, timeout=5.0)
+				elapsed = time.time() - start_time
 
-			stdout, stderr = process.communicate(user_input)
+				if stdout.strip():
+					self.append_log(f"-- Output ({elapsed:.2f}s):\n" + stdout + "\n")
+				else:
+					self.append_log(f"-- Program exited with no stdout ({elapsed:.2f}s).\n")
 
-			if stdout.strip():
-				self.append_log("-- Output:\n")
-				self.append_log(stdout + "\n")
+				if stderr.strip():
+					self.append_log(f"[Stderr / Warnings]:\n" + stderr + "\n")
 
-			if stderr.strip():
-				self.append_log("\n[Error]\n" + stderr + "\n")
+			except subprocess.TimeoutExpired:
+				process.kill()
+				process.communicate()
+				self.append_log("\n[Time Limit Exceeded] Execution timed out after 5.0 seconds and was terminated.\n")
 
+		except FileNotFoundError:
+			self.append_log(f"[Execution Error] Binary or script '{cmd[0]}' not found.\n")
 		except Exception as e:
 			self.append_log(f"\nRuntime Error: {str(e)}\n")
 
@@ -702,9 +788,9 @@ class CFMT_GUI:
 
 	def change_theme(self, theme_name):
 		self.root.style.theme_use(theme_name)
-		self.theme_btn.config(text=f"{theme_name.capitalize()}")
+		self.theme_btn.config(text=f"Theme: {theme_name.capitalize()}")
 		try:
-			with open("theme_preference.txt", "w") as f:
+			with open("theme_preference.txt", "w", encoding="utf-8") as f:
 				f.write(theme_name)
 			if hasattr(self, 'log_text'):
 				self.append_log(f"--- Theme changed to {theme_name.capitalize()}\n")
@@ -725,8 +811,8 @@ class CFMT_GUI:
 	def validate_problem_id(prob_id):
 		if not prob_id:
 			return False, "Problem ID mustn't be empty."
-		if not re.match(r'^[0-9]+[A-Z][1-9]*', prob_id):
-			return False, "This doesn't look like a valid problem ID."
+		if not re.match(r'^[0-9]+[A-Za-z][0-9]*$', prob_id):
+			return False, "This doesn't look like a valid problem ID (e.g. 2160B, 1915C)."
 		return True, ""
 
 	@staticmethod
@@ -747,11 +833,11 @@ def main():
 	default_theme = "darkly"
 	if os.path.exists("theme_preference.txt"):
 		try:
-			with open("theme_preference.txt", "r") as f:
+			with open("theme_preference.txt", "r", encoding="utf-8") as f:
 				saved_theme = f.read().strip()
 				if saved_theme:
 					default_theme = saved_theme
-		except:
+		except Exception:
 			pass
 
 	root = ttk.Window(themename=default_theme)
@@ -779,6 +865,7 @@ def main():
 
 	git_repo_name = user_config["git_repo_name"]
 	cf_handle = user_config["cf_username"]
+	os.makedirs(git_repo_name, exist_ok=True)
 
 	root.deiconify()
 	app = CFMT_GUI(root, git_repo_name, cf_handle)
