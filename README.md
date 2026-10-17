@@ -27,27 +27,27 @@
 
 ---
 
-## ✨ Features
+## Features
 
-- ⚡ **Automated Solution Setup**: Generates problem files (`<ProblemID>.cpp` or `<ProblemID>.py`) pre-filled with your custom templates.
-- 📑 **Multi-File Tab System**: Solve and manage multiple contest problems in parallel with independent test inputs and outputs.
-- 🛠️ **Integrated Compile & Run**:
+- **Automated Solution Setup**: Generates problem files (`<ProblemID>.cpp` or `<ProblemID>.py`) pre-filled with your custom templates.
+- **Multi-File Tab System**: Solve and manage multiple contest problems in parallel with independent test inputs and outputs.
+- **Integrated Compile & Run**:
   - One-click compile for C++ using `g++ -std=c++14`.
   - Direct execution for Python and C++ with custom test case input boxes.
-- 🛡️ **Contest Anti-Cheating & Queue Protection**:
+- **Contest Anti-Cheating & Queue Protection**:
   - Automatically queries the Codeforces API (`user.status` & `contest.list`) to check if a problem was solved during an active, ongoing contest.
   - Automatically defers Git pushes to `contest_queue.json` until the official contest finishes to ensure compliance with Codeforces rules against sharing code during rounds.
   - Automatically pushes all queued solutions to GitHub once the contest ends.
-- 🚀 **Seamless Git & GitHub Integration**:
+- **Seamless Git & GitHub Integration**:
   - Automatically clones or connects to your personal GitHub solutions repository.
   - Formats commit messages (`solved <ProblemID>`).
   - Automatically pulls latest updates (`git pull --rebase --autostash`) and pushes directly to `main`.
-- 🎨 **Modern Themes**: Built with `ttkbootstrap`, featuring over 10 themes (*Darkly*, *Cyborg*, *Vapor*, *Solar*, *Superhero*, *Flatly*, *Litera*, etc.) with persistent theme preferences.
-- 💻 **Dual Interfaces**: Choose between the feature-rich **GUI** (`cfmt_gui.py` / `cfmt_gui.exe`) and the fast **CLI** (`cfmt.py`).
+- **Modern Themes**: Built with `ttkbootstrap`, featuring over 10 themes (*Darkly*, *Cyborg*, *Vapor*, *Solar*, *Superhero*, *Flatly*, *Litera*, etc.) with persistent theme preferences.
+- **Dual Interfaces**: Choose between the feature-rich **GUI** (`cfmt_gui.py` / `cfmt_gui.exe`) and the fast **CLI** (`cfmt.py`).
 
 ---
 
-## 📋 Requirements & Prerequisites
+## Requirements & Prerequisites
 
 ### Prerequisites
 1. **Python 3.8+** installed on your system.
@@ -73,7 +73,7 @@ Core dependencies:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Option 1: Standalone Windows Executable (No Python Required)
 1. Download `cfmt_gui.exe` from the [Latest Releases](https://github.com/mi-shraban/CFMT/releases/tag/v_1.1).
@@ -151,7 +151,7 @@ python cfmt_gui_pyside6.py
 
 ---
 
-## ⚙️ Configuration & Templates
+## Configuration & Templates
 
 ### User Configuration
 Your settings are stored locally in `user_config.json`:
@@ -171,7 +171,7 @@ Customize your initial solution templates by editing:
 
 ---
 
-## 🔒 Contest Queue & Anti-Cheating Logic
+## Contest Queue & Anti-Cheating Logic
 
 Codeforces strictly prohibits public sharing of contest solutions while a contest is running. CFMT protects you automatically:
 
@@ -193,7 +193,7 @@ flowchart TD
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 CFMT/
@@ -218,7 +218,7 @@ CFMT/
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions, bug reports, and feature requests are welcome!
 
@@ -230,6 +230,6 @@ Contributions, bug reports, and feature requests are welcome!
 
 ---
 
-## 📜 License
+## License
 
 This project is open-source and available under the [MIT License](LICENSE).
