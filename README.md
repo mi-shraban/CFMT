@@ -19,7 +19,7 @@
 
 ---
 
-## 📸 Preview
+## Preview
 
 <div align="center">
   <img src="https://github.com/user-attachments/assets/ec26f659-bda3-4e72-8c44-6322c74ebd9f" alt="CFMT Modern GUI" width="100%" />
@@ -102,7 +102,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🎮 Usage Guide
+## Usage Guide
 
 ### 1. Launching the GUI
 Run the primary GUI application:
