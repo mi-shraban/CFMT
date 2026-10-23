@@ -1,4 +1,4 @@
-# CFMT — Codeforces Managing Tool
+# CFMT — Codeforces Management Tool
 
 <div align="center">
 
